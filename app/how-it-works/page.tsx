@@ -7,38 +7,13 @@ import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { BlurWords } from "@/components/site/blur-in";
 import { StackRow } from "@/components/site/stack-row";
-import {
-  ImpactCap,
-  LossProtection,
-  UnlockCurve,
-} from "@/components/site/mechanics";
+import { Mechanics } from "@/components/site/mechanics";
 
 export const metadata: Metadata = {
   title: "How it works — Reveal",
   description:
     "Progressive unlocking, loss protection and impact caps: the three rules that make price discovery work on Reveal.",
 };
-
-const MECHANICS = [
-  {
-    title: "Selling opens progressively",
-    body: "A share of every position is sellable immediately, and the rest unlocks steadily. Nobody is locked in, but nobody can empty the pool in the first minute either.",
-    visual: <UnlockCurve />,
-    caption: "Sellable share over time",
-  },
-  {
-    title: "Losses open the gate faster",
-    body: "If the price falls against a position, its unlock accelerates. The deeper the drawdown, the closer the position gets to fully liquid.",
-    visual: <LossProtection />,
-    caption: "Unlock curve, normal versus drawdown",
-  },
-  {
-    title: "Impact is capped per window",
-    body: "Even fully unlocked, a wallet cannot move the pool beyond a set share within a time window. Excess size is refused, not the trade itself.",
-    visual: <ImpactCap />,
-    caption: "Sell size against the per-window cap",
-  },
-];
 
 const STEPS = [
   {
@@ -79,25 +54,10 @@ export default function HowItWorksPage() {
 
       <section className="relative px-4 py-12">
         <FullWidthDivider className="-top-px" />
-        <div className="grid gap-4 lg:grid-cols-3">
-          {MECHANICS.map((m) => (
-            <article
-              key={m.title}
-              className="flex flex-col gap-5 rounded-2xl border bg-card p-5"
-            >
-              <div className="rounded-xl border bg-muted/30 p-3">
-                {m.visual}
-              </div>
-              <div className="space-y-2">
-                <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
-                  {m.caption}
-                </p>
-                <h2 className="font-medium">{m.title}</h2>
-                <p className="text-sm text-muted-foreground">{m.body}</p>
-              </div>
-            </article>
-          ))}
-        </div>
+        <p className="mb-5 text-sm text-muted-foreground">
+          Hover or focus a value to see the rule recompute.
+        </p>
+        <Mechanics />
       </section>
 
       <section className="relative px-4 py-12">
