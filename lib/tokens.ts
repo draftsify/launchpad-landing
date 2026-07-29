@@ -1,4 +1,4 @@
-import type { DailyPoint } from "@/lib/analytics";
+export type SeriesPoint = { t: string; value: number };
 
 export type TokenRules = {
   initialUnlock: number;
@@ -29,8 +29,33 @@ export type Token = {
   supply: string;
   links: { website?: string; x?: string; telegram?: string };
   rules: TokenRules;
-  volume: DailyPoint[];
+  /** Capitalisation depuis le lancement, pas régulier. */
+  series: SeriesPoint[];
+  /** Repère du graphe : la capitalisation au premier bloc. */
+  launchMarketCap: number;
 };
+
+/**
+ * Étend une suite de valeurs sur un pas régulier. Évite d'écrire quarante
+ * horodatages à la main, et garantit qu'ils restent alignés sur l'âge affiché.
+ */
+function series(startISO: string, stepMinutes: number, values: number[]): SeriesPoint[] {
+  const start = new Date(startISO).getTime();
+  return values.map((value, i) => ({
+    t: new Date(start + i * stepMinutes * 60_000).toISOString(),
+    value: value * 1_000,
+  }));
+}
+
+// Lancement Jul 25 20:00 UTC, un point toutes les 2 h : 43 pas = 3 j 14 h,
+// ce que la fiche annonce comme âge. Le point à −24 h vaut 840K, ce qui
+// redonne exactement la variation de +42,8 % affichée ailleurs.
+const REVEAL_SERIES = series("2026-07-25T20:00:00Z", 120, [
+  340, 368, 352, 401, 389, 432, 470, 452, 498, 540, 521, 575, 612, 594, 648,
+  690, 668, 715, 762, 740, 690, 728, 775, 812, 786, 758, 802, 830, 795, 768,
+  812, 840, 902, 875, 948, 1010, 1085, 1152, 1218, 1190, 1265, 1310, 1248,
+  1200,
+]);
 
 // Données mock : aucun indexeur n'est branché à ce stade.
 export const TOKENS: Token[] = [
@@ -59,15 +84,8 @@ export const TOKENS: Token[] = [
       impactWindow: 5,
       launchDelay: 30,
     },
-    volume: [
-      { date: "Jul 22", value: 84_000 },
-      { date: "Jul 23", value: 112_000 },
-      { date: "Jul 24", value: 96_000 },
-      { date: "Jul 25", value: 143_000 },
-      { date: "Jul 26", value: 128_000 },
-      { date: "Jul 27", value: 167_000 },
-      { date: "Jul 28", value: 194_000 },
-    ],
+    series: REVEAL_SERIES,
+    launchMarketCap: 340_000,
   },
 ];
 

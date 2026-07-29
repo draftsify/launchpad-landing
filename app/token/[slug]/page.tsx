@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { XIcon } from "@/components/x-icon";
 import { CopyAddress } from "@/components/site/copy-address";
-import { TokenOverview } from "@/components/site/token-overview";
+import { MarketCapChart } from "@/components/site/market-cap-chart";
+import { TokenPosition } from "@/components/site/token-position";
 import { TOKENS, getToken } from "@/lib/tokens";
 
 export function generateStaticParams() {
@@ -134,7 +135,32 @@ export default async function TokenPage({
           </div>
         </header>
 
-        <TokenOverview token={token} />
+        {/* La capitalisation n'est pas répétée ici : c'est le titre du graphe
+            ci-dessous, et deux fois le même nombre sous deux étiquettes se lit
+            comme deux mesures différentes. */}
+        <div className="mt-8 grid divide-y rounded-2xl border sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
+          {[
+            ["Holders", token.holders],
+            ["Liquidity", token.liquidity],
+            ["Supply", token.supply],
+            ["Age", token.age],
+          ].map(([label, value]) => (
+            <div key={label} className="space-y-1 px-4 py-3 sm:px-5">
+              <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                {label}
+              </p>
+              <p className="text-lg font-medium tracking-tight">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,340px)]">
+          <MarketCapChart
+            points={token.series}
+            launchValue={token.launchMarketCap}
+          />
+          <TokenPosition ticker={token.ticker} rules={token.rules} />
+        </div>
 
         {/* Les règles de ce token précisément : c'est ce qu'un explorateur
             classique ne peut pas afficher. */}
