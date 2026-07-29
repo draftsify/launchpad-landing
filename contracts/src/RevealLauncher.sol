@@ -7,6 +7,7 @@ import {
     IUniswapV3Factory, IUniswapV3MintCallback, IUniswapV3Pool
 } from "./interfaces/IUniswapV3.sol";
 import {Rules, RevealRules} from "./libraries/RevealRules.sol";
+import {RevealFees} from "./RevealFees.sol";
 import {RevealToken} from "./RevealToken.sol";
 
 /**
@@ -21,15 +22,20 @@ import {RevealToken} from "./RevealToken.sol";
  * prix à travers la plage. C'est ce que Uniswap V2 ne sait pas faire : il exige
  * les deux côtés.
  *
- * La position est ouverte au nom de `BURN`. Dans v3 une position appartient à
- * (owner, tickLower, tickUpper) : personne d'autre que cette adresse ne peut
- * appeler `burn` ni `collect`, donc ni la liquidité ni les frais accumulés ne
- * sortiront jamais.
+ * La position appartient à `RevealFees`, qui n'expose qu'un `burn` à zéro —
+ * lequel matérialise les frais sans toucher à la liquidité. Celle-ci est donc
+ * aussi verrouillée qu'avec une adresse morte, mais les frais de swap restent
+ * récupérables au profit de la trésorerie.
  */
 contract RevealLauncher is IUniswapV3MintCallback {
     uint256 private constant Q96 = 1 << 96;
-    /// Propriétaire de la position : sans clé, donc sans retrait possible.
-    address public constant BURN = 0x000000000000000000000000000000000000dEaD;
+
+    /**
+     * Propriétaire des positions. Déployé ici, donc son `launcher` est
+     * forcément nous : aucune dépendance circulaire, et aucune fonction
+     * d'administration nulle part.
+     */
+    RevealFees public immutable fees;
 
     /**
      * Plage de la position. Deux jeux sont nécessaires parce que l'ordre des
@@ -96,6 +102,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
         uint24 fee_,
         uint16 observationCardinality_,
         uint256 supply_,
+        address treasury_,
         Rules memory rules_,
         Range memory rangeIfToken0_,
         Range memory rangeIfToken1_
@@ -111,6 +118,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
         supply = supply_;
         RevealRules.validate(rules_);
         rules = rules_;
+        fees = new RevealFees(treasury_);
         rangeIfToken0 = rangeIfToken0_;
         rangeIfToken1 = rangeIfToken1_;
     }
@@ -147,7 +155,8 @@ contract RevealLauncher is IUniswapV3MintCallback {
         // TWAP, donc aucun drawdown relief tant que le pool n'a pas grandi.
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinality);
 
-        deployed.initialize(pool, quote);
+        fees.register(token, pool, r.tickLower, r.tickUpper);
+        deployed.initialize(pool, quote, fees.treasury());
         tokens.push(token);
 
         emit Launched(token, msg.sender, pool, supply, r.tickLower, r.tickUpper, rules);
@@ -183,7 +192,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
 
         minting = pool;
         (uint256 used0, uint256 used1) = IUniswapV3Pool(pool).mint(
-            BURN, r.tickLower, r.tickUpper, liquidity, abi.encode(token)
+            address(fees), r.tickLower, r.tickUpper, liquidity, abi.encode(token)
         );
         minting = address(0);
 

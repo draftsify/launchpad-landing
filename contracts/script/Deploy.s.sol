@@ -66,6 +66,8 @@ contract Deploy is Script, StdCheats {
     function run() external returns (RevealLauncher launcher) {
         address factory = vm.envOr("AMM_FACTORY", address(0));
         address weth = vm.envOr("WETH", address(0));
+        // Destinataire des frais de swap. Sans lui, rien ne serait collectable.
+        address treasury = vm.envOr("TREASURY", msg.sender);
 
         bool mainnet = block.chainid == ROBINHOOD_MAINNET;
         if (mainnet) {
@@ -103,6 +105,7 @@ contract Deploy is Script, StdCheats {
             FEE,
             CARDINALITY,
             SUPPLY,
+            treasury,
             _rules(),
             _range(tm, TICK_LOW, TICK_HIGH),
             // Quand notre token est token1 le prix s'inverse : plage symétrique,

@@ -23,9 +23,25 @@ gas and nothing else.
 Uniswap V2 cannot do this — it requires both sides of a pair — which is the
 real reason this runs on V3, not any security argument.
 
-The position is minted to `0xdEaD`. A V3 position is keyed by
-`(owner, tickLower, tickUpper)`, so nobody can ever call `burn` or `collect` on
-it: neither the liquidity nor the fees it accrues can leave.
+## Fees
+
+The position is owned by `RevealFees`, which exposes exactly one gesture:
+`burn(lower, upper, 0)`. The zero is hardcoded and never a parameter — in V3 a
+zero burn realises accrued fees without touching liquidity, and only a non-zero
+amount would withdraw it. No path through this contract can produce one, so the
+liquidity is as locked as it would be under a dead address while the fees stay
+reachable.
+
+Minting the position to `0xdEaD` locks the liquidity but buries the fees with
+it. That was the previous behaviour and it meant the protocol earned nothing.
+
+`collect` is permissionless and always pays the treasury: no key is needed to
+run it and nobody can redirect it. The contract never holds the funds — the
+pool sends them straight on. Tokens received as fees still carry a position, so
+the treasury sells under the same rules as everyone else.
+
+The split is 100% protocol. Worth knowing: the dominant launchpad on this chain
+pays creators 70%.
 
 Supply, like the rules, is fixed at the launcher. The tick range fixes a
 price per token, so opening market cap is supply × that price — a variable

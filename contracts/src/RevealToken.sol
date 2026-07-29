@@ -65,6 +65,13 @@ contract RevealToken is ERC20 {
 
     address public pool;
     address public quote;
+    /**
+     * Trésorerie du protocole. Elle reçoit les frais du pool, qui transitent
+     * donc par un transfert pool → trésorerie. Ce transfert ressemble à un
+     * achat sans en être un : aucune quote n'entre, et le compter comme tel
+     * gonflerait faussement la référence du plafond d'impact.
+     */
+    address public feeTreasury;
     bool public tokenIsToken0;
     uint64 public launchedAt;
 
@@ -113,12 +120,13 @@ contract RevealToken is ERC20 {
      * laisse la factory poser la liquidité ; après, plus rien ne peut être
      * changé — il n'existe aucune autre fonction d'écriture sur la config.
      */
-    function initialize(address pool_, address quote_) external {
+    function initialize(address pool_, address quote_, address feeTreasury_) external {
         if (msg.sender != launcher) revert OnlyLauncher();
         if (pool != address(0)) revert AlreadyInitialized();
 
         pool = pool_;
         quote = quote_;
+        feeTreasury = feeTreasury_;
         tokenIsToken0 = IUniswapV3Pool(pool_).token0() == address(this);
         launchedAt = uint64(block.timestamp);
     }
@@ -233,12 +241,18 @@ contract RevealToken is ERC20 {
         }
 
         if (from == pool) {
-            _guardBuy(value);
+            // Les frais versés à la trésorerie ne sont ni bridés ni comptés
+            // comme de la liquidité entrante — mais ils ouvrent bien une
+            // position, donc le protocole reste soumis à ses propres règles
+            // de vente.
+            if (to != feeTreasury) {
+                _guardBuy(value);
             // Relève la référence du plafond. Uniquement sur un achat : une
             // vente la ferait baisser au milieu de sa propre vérification.
             // La quote de cet achat n'est pas encore versée — le pool paie
             // après nous — donc on l'estime au prix spot.
-            quoteMark = uint128(_quoteReserve() + _tokensToQuote(value));
+                quoteMark = uint128(_quoteReserve() + _tokensToQuote(value));
+            }
             _recordEntry(to, value);
         } else if (to == pool) {
             uint256 unlocked = _consumeRelease(from, value);

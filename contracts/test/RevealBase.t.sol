@@ -50,6 +50,7 @@ abstract contract RevealBase is Test {
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
     address internal whale = makeAddr("whale");
+    address internal treasury = makeAddr("treasury");
 
     function defaultRules() internal pure returns (Rules memory) {
         return Rules({
@@ -71,6 +72,7 @@ abstract contract RevealBase is Test {
             FEE,
             CARDINALITY,
             SUPPLY,
+            treasury,
             defaultRules(),
             _range(TICK_LOW, TICK_HIGH),
             // Quand notre token est token1 le prix s'inverse : la plage est la
