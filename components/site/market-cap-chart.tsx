@@ -17,8 +17,9 @@ const MAX_DRAWN = 220;
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
- * Fenêtres proposées. Pas de « 7 j » : le token n'a que 3 j 14 h d'historique,
- * l'onglet serait un mensonge poli.
+ * Fenêtres possibles. Celles qui dépassent la vie du token sont retirées à
+ * l'affichage : un onglet « 24 H » sur un lancement de huit heures montrerait
+ * la série entière sous une étiquette fausse.
  */
 const RANGES = [
   { id: "1H", hours: 1, label: "Past hour", sr: "over the past hour" },
@@ -75,7 +76,13 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
   const [active, setActive] = useState<number | null>(null);
   const [rangeId, setRangeId] = useState<RangeId>("ALL");
 
-  const range = RANGES.find((r) => r.id === rangeId)!;
+  // Une fenêtre plus longue que la vie du token afficherait la série entière
+  // sous une étiquette fausse. On ne propose que ce qui existe.
+  const spanHours =
+    ((source.controls.length - 1) * source.perControl * source.stepMinutes) / 60;
+  const ranges = RANGES.filter((r) => r.hours === null || r.hours < spanHours);
+
+  const range = ranges.find((r) => r.id === rangeId) ?? ranges[ranges.length - 1];
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -86,7 +93,7 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
   }, []);
 
   // Changer de fenêtre renumérote les points : le curseur pointerait ailleurs.
-  useEffect(() => setActive(null), [rangeId]);
+  useEffect(() => setActive(null), [range.id]);
 
   const full = useMemo(() => buildSeries(source), [source]);
 
@@ -100,8 +107,12 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
   const last = points[points.length - 1].value;
   const change = ((last - open) / open) * 100;
   const up = change >= 0;
-  // Sous 36 h, la date se répète d'un bout à l'autre : c'est l'heure qui parle.
-  const byClock = range.hours !== null && range.hours <= 36;
+  // Lu sur la durée réellement affichée, pas sur l'onglet : « depuis le
+  // lancement » d'un token de huit heures tient dans une journée, et répéter
+  // quatre fois la même date n'apprendrait rien.
+  const visibleHours =
+    (Date.parse(points[points.length - 1].t) - Date.parse(points[0].t)) / 3_600_000;
+  const byClock = visibleHours <= 36;
 
   const g = useMemo(() => {
     const plotW = Math.max(width - PAD.right, 0);
@@ -196,16 +207,16 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
           aria-label="Time range"
           className="inline-flex shrink-0 items-center rounded-full border bg-card p-1"
         >
-          {RANGES.map((r) => (
+          {ranges.map((r) => (
             <button
               key={r.id}
               type="button"
               role="tab"
-              aria-selected={rangeId === r.id}
+              aria-selected={range.id === r.id}
               onClick={() => setRangeId(r.id)}
               className={cn(
                 "h-7 rounded-full px-3 font-mono text-xs transition-colors",
-                rangeId === r.id
+                range.id === r.id
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
@@ -247,7 +258,7 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
 
               {/* Remonté à chaque fenêtre : le tracé se redessine. */}
               <motion.path
-                key={`area-${rangeId}`}
+                key={`area-${range.id}`}
                 d={g.area}
                 fill={`url(#${gradientId})`}
                 initial={reduce ? false : { opacity: 0 }}
@@ -257,7 +268,7 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
 
               {/* La courbe se trace de gauche à droite, dans le sens du temps. */}
               <motion.path
-                key={`line-${rangeId}`}
+                key={`line-${range.id}`}
                 d={g.line}
                 fill="none"
                 stroke="#fafafa"
@@ -313,7 +324,7 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
               )}
 
               <motion.g
-                key={`tip-${rangeId}`}
+                key={`tip-${range.id}`}
                 initial={reduce ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={reduce ? { duration: 0 } : { duration: 0.5, delay: 1 }}
@@ -359,7 +370,7 @@ export function MarketCapChart({ source }: { source: ChartSource }) {
                 className="pointer-events-none absolute -translate-x-full -translate-y-1/2 rounded-md border bg-background/90 px-2 py-1 font-mono text-[10px] whitespace-nowrap text-muted-foreground backdrop-blur-sm"
                 style={{ top: g.y(open), left: g.plotW - 14 }}
               >
-                {rangeId === "ALL" ? "Launch" : "Open"} {formatUsd(open)}
+                {range.id === "ALL" ? "Launch" : "Open"} {formatUsd(open)}
               </span>
             )}
 

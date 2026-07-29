@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Flame, Globe, Send } from "lucide-react";
@@ -10,6 +9,7 @@ import { FullWidthDivider } from "@/components/full-width-divider";
 import { XIcon } from "@/components/x-icon";
 import { CopyAddress } from "@/components/site/copy-address";
 import { MarketCapChart } from "@/components/site/market-cap-chart";
+import { TokenMark } from "@/components/site/token-mark";
 import { TokenPosition } from "@/components/site/token-position";
 import { TOKENS, getToken } from "@/lib/tokens";
 
@@ -74,16 +74,7 @@ export default async function TokenPage({
 
         <header className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4 sm:gap-5">
-            <span className="flex size-20 shrink-0 items-center justify-center rounded-2xl border bg-muted/50 sm:size-24">
-              <Image
-                src={token.logo}
-                alt=""
-                width={512}
-                height={287}
-                priority
-                className="h-9 w-auto sm:h-11"
-              />
-            </span>
+            <TokenMark token={token} />
 
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">

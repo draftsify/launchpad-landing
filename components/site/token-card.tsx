@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, Flame } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -9,6 +8,7 @@ import type { Token } from "@/lib/tokens";
 import { formatUsd } from "@/lib/format";
 import { CopyAddress } from "@/components/site/copy-address";
 import { CountUp } from "@/components/site/count-up";
+import { TokenMark } from "@/components/site/token-mark";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -36,10 +36,19 @@ export function TokenCard({ token, index = 0 }: { token: Token; index?: number }
 
   return (
     <motion.article
+      // `layout` fait glisser la carte quand le tri change, au lieu de la
+      // téléporter : c'est ce qui rend le changement d'ordre lisible.
+      layout
       initial={reduce ? undefined : { opacity: 0, y: 14 }}
       whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+      exit={reduce ? undefined : { opacity: 0, scale: 0.97 }}
       viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.6, delay: index * 0.08, ease: EASE }}
+      transition={{
+        duration: 0.6,
+        delay: index * 0.08,
+        ease: EASE,
+        layout: { duration: 0.45, delay: 0, ease: EASE },
+      }}
       className="group relative overflow-hidden rounded-2xl border bg-card transition-colors duration-300 hover:border-foreground/25"
     >
       {/* Halo qui se révèle au survol, ancré derrière le logo. */}
@@ -50,15 +59,10 @@ export function TokenCard({ token, index = 0 }: { token: Token; index?: number }
 
       <div className="relative flex flex-col gap-6 p-5 sm:p-6">
         <div className="flex items-start gap-4 sm:gap-5">
-          <span className="flex size-20 shrink-0 items-center justify-center rounded-2xl border bg-muted/50 transition-transform duration-300 group-hover:scale-[1.03] sm:size-24">
-            <Image
-              src={token.logo}
-              alt=""
-              width={512}
-              height={287}
-              className="h-9 w-auto select-none sm:h-11"
-            />
-          </span>
+          <TokenMark
+            token={token}
+            className="transition-transform duration-300 group-hover:scale-[1.03]"
+          />
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex items-start justify-between gap-3">

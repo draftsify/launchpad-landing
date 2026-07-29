@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
+import { TokenMark } from "@/components/site/token-mark";
 import { searchTokens } from "@/lib/tokens";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -122,15 +122,7 @@ export function NavSearch() {
                     }}
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted"
                   >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border bg-muted/60">
-                      <Image
-                        src={token.logo}
-                        alt=""
-                        width={512}
-                        height={287}
-                        className="h-3 w-auto"
-                      />
-                    </span>
+                    <TokenMark token={token} size="sm" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
                         {token.name}
