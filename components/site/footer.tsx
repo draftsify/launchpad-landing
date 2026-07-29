@@ -11,6 +11,7 @@ const PRODUCT = [
   { title: "How it works", href: "/how-it-works" },
   { title: "Launch a token", href: "/#create" },
   { title: "Docs", href: "/docs" },
+  { title: "Analytics", href: "/analytics" },
 ];
 
 const COMPANY = [

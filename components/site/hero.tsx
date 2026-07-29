@@ -18,12 +18,12 @@ export function Hero() {
       <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center justify-center gap-5">
         <BlurIn delay={0.1} duration={1.1} blur={8} y={10}>
           <Link
-            href="#protocol"
+            href="/analytics"
             className="group flex w-fit items-center gap-2 rounded-full border bg-card px-3 py-1.5 shadow-xs transition-colors hover:bg-muted active:scale-98"
           >
             <Sparkles className="size-3" />
             <span aria-hidden className="block h-4 border-l" />
-            <span className="text-xs">Progressive unlocking, built in</span>
+            <span className="text-xs">Discover analytics</span>
             <span aria-hidden className="block h-4 border-l" />
             <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
           </Link>
