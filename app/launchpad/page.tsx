@@ -78,7 +78,7 @@ export default function LaunchpadPage() {
               type="search"
               placeholder="Search by name or ticker"
               aria-label="Search tokens"
-              className="h-9 w-full rounded-full border bg-card pr-3 pl-9 text-sm text-foreground transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-foreground/25 focus-visible:ring-2 focus-visible:ring-foreground/20"
+              className="h-9 w-full rounded-full border bg-card pr-3 pl-9 text-sm text-foreground transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-foreground/60"
             />
           </div>
         </div>

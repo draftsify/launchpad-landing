@@ -80,7 +80,7 @@ function Field({
 }
 
 const inputClass =
-  "h-10 w-full rounded-xl border bg-card px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-foreground/25 focus-visible:ring-2 focus-visible:ring-foreground/20";
+  "h-10 w-full rounded-xl border bg-card px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-foreground/60";
 
 function PrefixInput({
   id,
@@ -93,7 +93,7 @@ function PrefixInput({
   prefix?: string;
 }) {
   return (
-    <div className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 transition-colors focus-within:border-foreground/25 focus-within:ring-2 focus-within:ring-foreground/20">
+    <div className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 transition-colors focus-within:border-foreground/60">
       <span aria-hidden className="shrink-0 text-muted-foreground [&_svg]:size-3.5">
         {icon}
       </span>
@@ -283,7 +283,7 @@ export function CreateForm() {
               }
               rows={3}
               placeholder="What is this token for?"
-              className="w-full resize-y rounded-xl border bg-card px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-foreground/25 focus-visible:ring-2 focus-visible:ring-foreground/20"
+              className="w-full resize-y rounded-xl border bg-card px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-foreground/60"
             />
           </Field>
         </Section>
@@ -521,7 +521,29 @@ export function CreateForm() {
 
       <aside className="lg:sticky lg:top-20 lg:self-start">
         <div className="space-y-4 rounded-2xl border bg-card p-5">
-          <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
+          {/* Action principale en tête du panneau : elle reste atteignable
+              sans avoir à parcourir le récapitulatif. */}
+          <div className="space-y-2">
+            {account ? (
+              <Button className="w-full" disabled>
+                Launch token
+              </Button>
+            ) : (
+              <WalletDialog>
+                <Button className="w-full">
+                  <Wallet />
+                  Connect wallet to launch
+                </Button>
+              </WalletDialog>
+            )}
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info aria-hidden className="mt-0.5 size-3 shrink-0" />
+              Deployment goes live with the contracts. Nothing on this page is
+              submitted anywhere yet.
+            </p>
+          </div>
+
+          <p className="border-t pt-4 text-[11px] tracking-wide text-muted-foreground uppercase">
             Live preview
           </p>
 
@@ -598,26 +620,6 @@ export function CreateForm() {
               </div>
             ))}
           </dl>
-
-          <div className="space-y-2 border-t pt-4">
-            {account ? (
-              <Button className="w-full" disabled>
-                Launch token
-              </Button>
-            ) : (
-              <WalletDialog>
-                <Button className="w-full">
-                  <Wallet />
-                  Connect wallet to launch
-                </Button>
-              </WalletDialog>
-            )}
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Info aria-hidden className="mt-0.5 size-3 shrink-0" />
-              Deployment goes live with the contracts. Nothing on this page is
-              submitted anywhere yet.
-            </p>
-          </div>
         </div>
       </aside>
     </div>
