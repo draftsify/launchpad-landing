@@ -6,6 +6,8 @@ import { Check, Copy, Flame } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import type { Token } from "@/lib/tokens";
+import { formatUsd } from "@/lib/format";
+import { CountUp } from "@/components/site/count-up";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -113,9 +115,12 @@ export function TokenCard({ token, index = 0 }: { token: Token; index?: number }
             <div className="flex items-baseline gap-2">
               {/* Chiffres proportionnels : tabular-nums donne à chaque chiffre
                   la largeur d'un 0, ce qui délave un grand nombre. */}
-              <span className="text-3xl font-medium tracking-tight sm:text-4xl">
-                {token.marketCap}
-              </span>
+              <CountUp
+                value={token.marketCapValue}
+                format={formatUsd}
+                delay={0.15}
+                className="text-3xl font-medium tracking-tight sm:text-4xl"
+              />
               {/* En monochrome, la direction passe par la flèche. */}
               <span
                 className={cn(

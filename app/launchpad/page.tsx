@@ -5,6 +5,7 @@ import { ArrowRight, Coins, Search } from "lucide-react";
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { BlurWords } from "@/components/site/blur-in";
 import { TokenCard } from "@/components/site/token-card";
 import { TOKENS } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
@@ -28,8 +29,8 @@ export default function LaunchpadPage() {
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
             <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-              Launchpad
-            </h1>
+            <BlurWords text="Launchpad" delay={0.05} />
+          </h1>
             <p className="max-w-lg text-sm text-muted-foreground sm:text-base">
               Every token launched on Reveal, with its unlock schedule and live
               price discovery.

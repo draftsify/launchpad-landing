@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { Shell } from "@/components/site/shell";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { BlurWords } from "@/components/site/blur-in";
 import { AnalyticsDashboard } from "@/components/site/analytics-dashboard";
 
 export const metadata: Metadata = {
@@ -18,7 +19,7 @@ export default function AnalyticsPage() {
 
         <header className="mb-6 max-w-2xl space-y-2">
           <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-            Protocol analytics
+            <BlurWords text="Protocol analytics" delay={0.05} />
           </h1>
           <p className="text-sm text-muted-foreground sm:text-base">
             Volume, deployments and trading activity across every token launched

@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { BlurWords } from "@/components/site/blur-in";
 
 export const metadata: Metadata = {
   title: "Docs — Reveal",
@@ -138,8 +139,8 @@ export default function DocsPage() {
           <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
             <div className="space-y-2">
               <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-                Docs
-              </h1>
+            <BlurWords text="Docs" delay={0.05} />
+          </h1>
               <p className="text-sm text-muted-foreground">
                 How the protocol behaves, and every knob you can turn.
               </p>

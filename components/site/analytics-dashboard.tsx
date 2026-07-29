@@ -10,6 +10,7 @@ import {
   type Range,
 } from "@/lib/analytics";
 import { BarChart } from "@/components/site/bar-chart";
+import { CountUp } from "@/components/site/count-up";
 import { cn } from "@/lib/utils";
 
 const RANGES: { id: Range; label: string }[] = [
@@ -61,18 +62,27 @@ export function AnalyticsDashboard() {
             <p className="text-sm text-muted-foreground">{hero.label}</p>
             {/* Chiffre-phare : chiffres proportionnels, un seul par vue. */}
             <p className="mt-1 text-5xl font-medium tracking-tight">
-              {hero.value}
+              <CountUp
+                key={`${range}-${hero.label}`}
+                value={hero.value}
+                format={hero.kind === "usd" ? formatUsd : formatCount}
+              />
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {hero.delta ? `${hero.delta} ${hero.hint}` : hero.hint}
             </p>
           </div>
 
-          {rest.map((stat) => (
+          {rest.map((stat, i) => (
             <div key={stat.label} className="sm:pl-6">
               <p className="text-sm text-muted-foreground">{stat.label}</p>
               <p className="mt-1 text-3xl font-medium tracking-tight">
-                {stat.value}
+                <CountUp
+                  key={`${range}-${stat.label}`}
+                  value={stat.value}
+                  format={stat.kind === "usd" ? formatUsd : formatCount}
+                  delay={0.1 + i * 0.1}
+                />
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {stat.delta ? `${stat.delta} ${stat.hint}` : stat.hint}

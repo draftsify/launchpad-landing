@@ -1,3 +1,5 @@
+export { formatUsd, formatCount } from "@/lib/format";
+
 export type DailyPoint = { date: string; value: number };
 
 export type Range = "24h" | "all";
@@ -52,45 +54,41 @@ function delta(points: DailyPoint[]) {
   return ((last - prev) / prev) * 100;
 }
 
-export function formatUsd(value: number) {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${value}`;
-}
-
-export function formatCount(value: number) {
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return `${value}`;
-}
 
 export type Stat = {
   label: string;
-  value: string;
+  /** Valeur brute : le défilement à l'apparition anime le nombre, pas le texte. */
+  value: number;
+  kind: "usd" | "count";
   delta?: string;
   hint: string;
 };
 
-export function getStats(range: Range): Stat[] {
-  const lastVolume = VOLUME[VOLUME.length - 1].value;
-  const lastLaunches = LAUNCHES[LAUNCHES.length - 1].value;
+function signed(value: number) {
+  return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}%`;
+}
 
+export function getStats(range: Range): Stat[] {
   if (range === "24h") {
     return [
       {
         label: "24h volume",
-        value: formatUsd(lastVolume),
-        delta: `${delta(VOLUME) >= 0 ? "+" : "−"}${Math.abs(delta(VOLUME)).toFixed(1)}%`,
+        value: VOLUME[VOLUME.length - 1].value,
+        kind: "usd",
+        delta: signed(delta(VOLUME)),
         hint: "from prior day",
       },
       {
         label: "24h launches",
-        value: formatCount(lastLaunches),
-        delta: `${delta(LAUNCHES) >= 0 ? "+" : "−"}${Math.abs(delta(LAUNCHES)).toFixed(1)}%`,
+        value: LAUNCHES[LAUNCHES.length - 1].value,
+        kind: "count",
+        delta: signed(delta(LAUNCHES)),
         hint: "from prior day",
       },
       {
         label: "24h trades",
-        value: formatCount(1_412),
+        value: 1_412,
+        kind: "count",
         delta: "+6.2%",
         hint: "from prior day",
       },
@@ -100,17 +98,20 @@ export function getStats(range: Range): Stat[] {
   return [
     {
       label: "Total volume",
-      value: formatUsd(sum(VOLUME)),
+      value: sum(VOLUME),
+      kind: "usd",
       hint: "since first launch",
     },
     {
       label: "Tokens deployed",
-      value: formatCount(sum(LAUNCHES)),
+      value: sum(LAUNCHES),
+      kind: "count",
       hint: "since first launch",
     },
     {
       label: "Total trades",
-      value: formatCount(18_640),
+      value: 18_640,
+      kind: "count",
       hint: "since first launch",
     },
   ];

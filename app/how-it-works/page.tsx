@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { BlurWords } from "@/components/site/blur-in";
 import { StackRow } from "@/components/site/stack-row";
 import {
   ImpactCap,
@@ -66,7 +67,7 @@ export default function HowItWorksPage() {
 
         <header className="max-w-2xl space-y-3">
           <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-            How Reveal works
+            <BlurWords text="How Reveal works" delay={0.05} />
           </h1>
           <p className="text-sm text-muted-foreground sm:text-base">
             Three rules, written into the contract before the first buy. The

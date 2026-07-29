@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
-import { Table2 } from "lucide-react";
+import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 import type { DailyPoint } from "@/lib/analytics";
+import { CountUp } from "@/components/site/count-up";
 import { cn } from "@/lib/utils";
 
 const PLOT_HEIGHT = 176;
@@ -42,8 +43,7 @@ export function BarChart({
   integer?: boolean;
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
-  const [showTable, setShowTable] = useState(false);
-  const tableId = useId();
+  const reduce = useReducedMotion();
 
   const scale = niceMax(Math.max(...data.map((d) => d.value)), integer);
   const lastIndex = data.length - 1;
@@ -51,23 +51,9 @@ export function BarChart({
 
   return (
     <section className="flex flex-col rounded-2xl border bg-card p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="font-medium">{title}</h3>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowTable((v) => !v)}
-          aria-expanded={showTable}
-          aria-controls={tableId}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/50 focus-visible:outline-none"
-        >
-          <Table2 className="size-3.5" />
-          <span className="sr-only">
-            {showTable ? "Hide data table" : "Show data table"}
-          </span>
-        </button>
+      <div className="space-y-1">
+        <h3 className="font-medium">{title}</h3>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
 
       <div className="mt-6 flex gap-3">
@@ -120,13 +106,22 @@ export function BarChart({
                   onBlur={() => setHovered(null)}
                   aria-label={`${point.date}: ${format(point.value)}`}
                 >
-                  <span
+                  {/* Les barres poussent depuis la ligne de base, en cascade. */}
+                  <motion.span
                     className={cn(
-                      "w-full rounded-t-[4px] transition-opacity",
+                      "w-full origin-bottom rounded-t-[4px] transition-opacity",
                       emphasis ? "bg-foreground" : "bg-foreground/40",
                       hovered !== null && hovered !== i && "opacity-70"
                     )}
                     style={{ height: `${height}%` }}
+                    initial={reduce ? undefined : { scaleY: 0 }}
+                    whileInView={reduce ? undefined : { scaleY: 1 }}
+                    viewport={{ once: true, amount: 0.4 }}
+                    transition={{
+                      duration: 0.8,
+                      delay: i * 0.04,
+                      ease: [0.16, 1, 0.3, 1],
+                    }}
                   />
                   {emphasis && (
                     <span
@@ -134,7 +129,12 @@ export function BarChart({
                       className="absolute inset-x-0 -translate-y-1 text-center font-mono text-[10px] whitespace-nowrap text-foreground"
                       style={{ bottom: `${height}%` }}
                     >
-                      {format(point.value)}
+                      <CountUp
+                        value={point.value}
+                        format={format}
+                        delay={0.3}
+                        duration={1.2}
+                      />
                     </span>
                   )}
                 </button>
@@ -168,35 +168,6 @@ export function BarChart({
         </div>
       </div>
 
-      {showTable && (
-        <div id={tableId} className="mt-4 overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-sm">
-            <caption className="sr-only">{title} by day</caption>
-            <thead className="border-b bg-muted/40">
-              <tr>
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Day
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  {title}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((point) => (
-                <tr key={point.date} className="border-b last:border-b-0">
-                  <td className="px-3 py-1.5 text-muted-foreground">
-                    {point.date}
-                  </td>
-                  <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                    {format(point.value)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </section>
   );
 }
