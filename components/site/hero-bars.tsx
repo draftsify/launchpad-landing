@@ -45,20 +45,16 @@ export function HeroBars() {
                 delay: 0.15 + fromCenter * 0.05,
                 ease: [0.16, 1, 0.3, 1],
               }}
-              className="h-full origin-bottom rounded-t-md border-x-[0.5px] first:border-l-0 last:border-r-0"
+              className="h-full origin-bottom overflow-hidden rounded-t-md border-x-[0.5px] first:border-l-0 last:border-r-0"
               style={{
                 flex: `1 0 calc(100% / ${BAR_COUNT})`,
                 maxWidth: `calc(100% / ${BAR_COUNT})`,
               }}
             >
-              {/*
-                Respiration continue, sur un élément imbriqué : la barre garde
-                sa hauteur d'entrée (bordures stables) pendant que la lumière
-                monte et redescend. Le débordement en haut est invisible,
-                le dégradé y est déjà transparent.
-              */}
+              {/* Respiration : la barre garde la hauteur fixée par son entrée
+                  (bordures stables), seule la lumière monte et redescend. */}
               <motion.div
-                className="h-full w-full origin-bottom bg-linear-to-t from-primary/85 to-transparent"
+                className="relative h-full w-full origin-bottom"
                 animate={
                   reduce
                     ? undefined
@@ -77,7 +73,31 @@ export function HeroBars() {
                   repeatType: "loop",
                 }}
                 style={{ willChange: "transform, opacity" }}
-              />
+              >
+                {/*
+                  Le dégradé glisse verticalement : on translate (composité par
+                  le GPU) au lieu de déplacer background-position, qui
+                  repeindrait à chaque frame.
+
+                  Deux contraintes fixent les valeurs : la translation ne va que
+                  vers le bas, sinon le bas de la barre se découvre et laisse une
+                  bande sombre ; et la hauteur reste proche de 100%, sinon le
+                  fondu vers le transparent sort du cadre et les barres
+                  s'alourdissent en blocs pleins.
+                */}
+                <motion.div
+                  className="absolute inset-x-0 bottom-0 bg-linear-to-t from-primary/85 to-transparent"
+                  style={{ height: "112%", willChange: "transform" }}
+                  animate={reduce ? undefined : { y: ["0%", "6%", "0%"] }}
+                  transition={{
+                    duration: 26,
+                    delay: i * 0.7,
+                    ease: "easeInOut",
+                    repeat: Infinity,
+                    repeatType: "loop",
+                  }}
+                />
+              </motion.div>
             </motion.div>
           );
         })}
