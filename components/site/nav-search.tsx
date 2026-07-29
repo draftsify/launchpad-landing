@@ -115,7 +115,7 @@ export function NavSearch() {
                 {results.map((token) => (
                   <Link
                     key={token.ticker}
-                    href="/launchpad"
+                    href={`/token/${token.slug}`}
                     onClick={() => {
                       setOpen(false);
                       setQuery("");

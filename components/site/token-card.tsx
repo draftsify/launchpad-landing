@@ -1,50 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
-import { Check, Copy, Flame } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, Flame } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import type { Token } from "@/lib/tokens";
 import { formatUsd } from "@/lib/format";
+import { CopyAddress } from "@/components/site/copy-address";
 import { CountUp } from "@/components/site/count-up";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-
-function shortenAddress(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
-
-function CopyAddress({ address }: { address: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // Presse-papiers refusé (contexte non sécurisé) : on n'affiche rien.
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="group/copy inline-flex items-center gap-1.5 rounded-md font-mono text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/50 focus-visible:outline-none"
-      aria-label={copied ? "Address copied" : `Copy contract address ${address}`}
-    >
-      {shortenAddress(address)}
-      {copied ? (
-        <Check className="size-3" />
-      ) : (
-        <Copy className="size-3 opacity-60 transition-opacity group-hover/copy:opacity-100" />
-      )}
-    </button>
-  );
-}
 
 function Stat({
   label,
@@ -96,8 +63,13 @@ export function TokenCard({ token, index = 0 }: { token: Token; index?: number }
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-lg leading-tight font-medium">
-                  {token.name}
+                <p className="flex items-center gap-1.5 text-lg leading-tight font-medium">
+                  <span className="truncate">{token.name}</span>
+                  {/* Affordance du lien : la carte entière est cliquable. */}
+                  <ArrowUpRight
+                    aria-hidden
+                    className="size-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:text-foreground group-hover:opacity-100"
+                  />
                 </p>
                 <p className="font-mono text-xs text-muted-foreground">
                   ${token.ticker}
@@ -166,10 +138,24 @@ export function TokenCard({ token, index = 0 }: { token: Token; index?: number }
           <Stat label="Age">{token.age}</Stat>
           <Stat label="Holders">{token.holders}</Stat>
           <Stat label="Contract">
-            <CopyAddress address={token.address} />
+            {/* Au-dessus du calque de lien, sinon copier navigue. */}
+            <span className="relative z-20">
+              <CopyAddress address={token.address} />
+            </span>
           </Stat>
         </div>
       </div>
+
+      {/* Lien étalé plutôt qu'un <a> englobant : la carte contient déjà un
+          bouton (copier), qu'on ne peut pas imbriquer dans un lien. */}
+      <Link
+        href={`/token/${token.slug}`}
+        className="absolute inset-0 z-10 rounded-2xl focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:outline-none"
+      >
+        <span className="sr-only">
+          View {token.name} (${token.ticker})
+        </span>
+      </Link>
     </motion.article>
   );
 }
