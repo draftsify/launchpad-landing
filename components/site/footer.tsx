@@ -10,7 +10,7 @@ const PRODUCT = [
   { title: "Explore launches", href: "/launchpad" },
   { title: "How it works", href: "/how-it-works" },
   { title: "Launch a token", href: "/#create" },
-  { title: "Docs", href: "#docs" },
+  { title: "Docs", href: "/docs" },
 ];
 
 const COMPANY = [

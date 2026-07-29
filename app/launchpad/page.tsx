@@ -5,7 +5,8 @@ import { ArrowRight, Coins, Search } from "lucide-react";
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
-import { TokenCard, type Token } from "@/components/site/token-card";
+import { TokenCard } from "@/components/site/token-card";
+import { TOKENS } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -17,20 +18,6 @@ export const metadata: Metadata = {
 // Onglets encore inertes : la donnée n'est pas branchée.
 const FILTERS = ["Recent", "Trending", "Market cap", "Ending soon"];
 
-const TRENDING: Token = {
-  name: "Reveal",
-  ticker: "REVEAL",
-  marketCap: "$1.2M",
-  change: 42.8,
-  address: "0x7A3F9c21E4b8D5a06fC1e7B2d93aC48e5F0b1d62",
-  age: "3d 14h",
-  locked: 62,
-  logo: "/logo.png",
-  spark: [
-    0.28, 0.34, 0.3, 0.42, 0.38, 0.52, 0.47, 0.61, 0.55, 0.68, 0.72, 0.64, 0.78,
-    0.71, 0.85, 0.92, 0.81, 1,
-  ],
-};
 
 export default function LaunchpadPage() {
   return (
@@ -96,7 +83,9 @@ export default function LaunchpadPage() {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <TokenCard token={TRENDING} />
+          {TOKENS.map((token, i) => (
+            <TokenCard key={token.ticker} token={token} index={i} />
+          ))}
 
           {/* Un seul lancement pour l'instant : l'emplacement libre l'annonce
               plutôt que de laisser une colonne vide. */}
