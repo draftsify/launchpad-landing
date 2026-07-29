@@ -5,6 +5,7 @@ import { ArrowRight, Coins, Search } from "lucide-react";
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { TokenCard, type Token } from "@/components/site/token-card";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -16,10 +17,25 @@ export const metadata: Metadata = {
 // Onglets encore inertes : la donnée n'est pas branchée.
 const FILTERS = ["Recent", "Trending", "Market cap", "Ending soon"];
 
+const TRENDING: Token = {
+  name: "Reveal",
+  ticker: "REVEAL",
+  marketCap: "$1.2M",
+  change: 42.8,
+  address: "0x7A3F9c21E4b8D5a06fC1e7B2d93aC48e5F0b1d62",
+  age: "3d 14h",
+  locked: 62,
+  logo: "/logo.png",
+  spark: [
+    0.28, 0.34, 0.3, 0.42, 0.38, 0.52, 0.47, 0.61, 0.55, 0.68, 0.72, 0.64, 0.78,
+    0.71, 0.85, 0.92, 0.81, 1,
+  ],
+};
+
 export default function LaunchpadPage() {
   return (
     <Shell>
-      <section className="relative px-4 pt-14 pb-20 sm:pt-20">
+      <section className="relative px-4 pt-8 pb-20 sm:pt-10">
         <FullWidthDivider className="-top-px" />
 
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -79,24 +95,28 @@ export default function LaunchpadPage() {
           </div>
         </div>
 
-        {/* État vide : aucun token n'est encore indexé. */}
-        <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-20 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full border bg-card">
-            <Coins className="size-5 text-muted-foreground" />
-          </span>
-          <div className="space-y-1">
-            <p className="font-medium">No tokens yet</p>
-            <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-              Launches will appear here as soon as the first token goes live on
-              Reveal.
-            </p>
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <TokenCard token={TRENDING} />
+
+          {/* Un seul lancement pour l'instant : l'emplacement libre l'annonce
+              plutôt que de laisser une colonne vide. */}
+          <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-14 text-center">
+            <span className="flex size-11 items-center justify-center rounded-full border bg-card">
+              <Coins className="size-5 text-muted-foreground" />
+            </span>
+            <div className="space-y-1">
+              <p className="font-medium">Your token here</p>
+              <p className="mx-auto max-w-xs text-sm text-muted-foreground">
+                Set your unlock curve and anti-sniper rules, then launch.
+              </p>
+            </div>
+            <Button variant="card" asChild>
+              <Link href="/#create">
+                Launch a token
+                <ArrowRight />
+              </Link>
+            </Button>
           </div>
-          <Button variant="card" asChild>
-            <Link href="/#create">
-              Be the first to launch
-              <ArrowRight />
-            </Link>
-          </Button>
         </div>
 
         <FullWidthDivider className="-bottom-px" />

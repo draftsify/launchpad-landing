@@ -6,6 +6,8 @@ import Link from "next/link";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { WalletDialog } from "@/components/site/wallet-dialog";
+import { useWallet, shortenAddress } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -16,6 +18,7 @@ const NAV = [
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const { account } = useWallet();
 
   return (
     <header className="sticky top-0 z-50 mx-auto flex h-14 w-full max-w-5xl items-center justify-between border-b bg-background/95 px-4 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 md:px-2">
@@ -87,9 +90,22 @@ export function Header() {
       </div>
 
       <div className="hidden items-center gap-2 md:flex">
-        <Button variant="outline" asChild>
-          <Link href="#app">Sign in</Link>
-        </Button>
+        <WalletDialog>
+          <Button variant="outline">
+            {account ? (
+              <>
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-foreground"
+                />
+                <span className="font-mono">{shortenAddress(account)}</span>
+                <span className="sr-only">Wallet connected</span>
+              </>
+            ) : (
+              "Connect wallet"
+            )}
+          </Button>
+        </WalletDialog>
         <Button asChild>
           <Link href="#create">
             Launch a token
@@ -115,11 +131,11 @@ export function Header() {
               </Link>
             ))}
             <div className="mt-2 flex flex-col gap-2">
-              <Button variant="outline" asChild>
-                <Link href="#app" onClick={() => setOpen(false)}>
-                  Sign in
-                </Link>
-              </Button>
+              <WalletDialog>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  {account ? shortenAddress(account) : "Connect wallet"}
+                </Button>
+              </WalletDialog>
               <Button asChild>
                 <Link href="#create" onClick={() => setOpen(false)}>
                   Launch a token

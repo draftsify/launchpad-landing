@@ -1,69 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
 import { Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { FullWidthDivider } from "@/components/full-width-divider";
-import { LOGO_RATIOS } from "@/lib/logo-ratios";
+import {
+  WalletDialog,
+  WalletLogo,
+  type WalletSlug,
+} from "@/components/site/wallet-dialog";
+import { useWallet, shortenAddress } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
-
-/** Fournisseur EIP-1193 injecté par les extensions de wallet. */
-type Eip1193Provider = {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-};
-declare global {
-  interface Window {
-    ethereum?: Eip1193Provider;
-  }
-}
-
-type WalletSlug = Extract<keyof typeof LOGO_RATIOS, `wallet-${string}`>;
-
-type WalletDef = {
-  name: string;
-  slug: WalletSlug;
-  /** Extension navigateur : connectable directement via window.ethereum. */
-  injected: boolean;
-};
-
-const WALLETS: WalletDef[] = [
-  { name: "MetaMask", slug: "wallet-metamask", injected: true },
-  { name: "Rabby", slug: "wallet-rabby", injected: true },
-  { name: "Rainbow", slug: "wallet-rainbow", injected: true },
-  { name: "Zerion", slug: "wallet-zerion", injected: true },
-  { name: "Trust Wallet", slug: "wallet-trust", injected: true },
-  { name: "Phantom", slug: "wallet-phantom", injected: true },
-  { name: "WalletConnect", slug: "wallet-wallet-connect", injected: false },
-  { name: "Ledger", slug: "wallet-ledger", injected: false },
-  { name: "Safe", slug: "wallet-safe", injected: false },
-  { name: "Argent", slug: "wallet-argent", injected: false },
-];
-
-const LOGO_SIZE = 30;
-
-function WalletLogo({ slug, size = LOGO_SIZE }: { slug: WalletSlug; size?: number }) {
-  return (
-    <Image
-      src={`/logos/${slug}.svg`}
-      alt=""
-      width={Math.round(size * LOGO_RATIOS[slug])}
-      height={size}
-      unoptimized
-      className="select-none object-contain"
-      style={{ height: size, width: "auto" }}
-    />
-  );
-}
 
 /** Damier volontairement irrégulier, comme sur la maquette. */
 const TILES: { row: number; col: number; slug?: WalletSlug }[] = [
@@ -83,44 +30,8 @@ const TILES: { row: number; col: number; slug?: WalletSlug }[] = [
 
 const CELL = 64;
 
-function shorten(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
-
 export function WalletConnect() {
-  const [account, setAccount] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-
-  async function connect(wallet: WalletDef) {
-    setError(null);
-
-    if (!wallet.injected) {
-      setError(`${wallet.name} nécessite son SDK, pas encore branché.`);
-      return;
-    }
-    if (typeof window === "undefined" || !window.ethereum) {
-      setError(`Aucune extension détectée. Installez ${wallet.name} puis réessayez.`);
-      return;
-    }
-
-    setPending(wallet.slug);
-    try {
-      const accounts = (await window.ethereum.request({
-        method: "eth_requestAccounts",
-      })) as string[];
-      if (accounts?.[0]) {
-        setAccount(accounts[0]);
-        setOpen(false);
-      }
-    } catch {
-      // Refus de l'utilisateur ou requête déjà en attente côté extension.
-      setError("Connexion refusée.");
-    } finally {
-      setPending(null);
-    }
-  }
+  const { account } = useWallet();
 
   return (
     <section className="relative px-4 py-14 sm:py-20">
@@ -137,66 +48,19 @@ export function WalletConnect() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button size="lg">
-                  <Wallet />
-                  {account ? shorten(account) : "Connect wallet"}
-                </Button>
-              </DialogTrigger>
-
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Connect a wallet</DialogTitle>
-                  <DialogDescription>
-                    Choose how you want to connect to Reveal.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <ul className="-mx-1 max-h-[340px] space-y-1 overflow-y-auto px-1">
-                  {WALLETS.map((wallet) => (
-                    <li key={wallet.slug}>
-                      <button
-                        type="button"
-                        onClick={() => connect(wallet)}
-                        disabled={pending !== null}
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors",
-                          "hover:border-border hover:bg-muted",
-                          "focus-visible:ring-2 focus-visible:ring-foreground/50 focus-visible:outline-none",
-                          "disabled:opacity-60"
-                        )}
-                      >
-                        <span className="flex size-8 shrink-0 items-center justify-center">
-                          <WalletLogo slug={wallet.slug} size={26} />
-                        </span>
-                        <span className="flex-1 text-sm font-medium">
-                          {wallet.name}
-                        </span>
-                        {pending === wallet.slug ? (
-                          <span className="text-xs text-muted-foreground">
-                            Connecting…
-                          </span>
-                        ) : !wallet.injected ? (
-                          <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                            Soon
-                          </span>
-                        ) : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-
-                {error && (
-                  <p role="alert" className="mt-3 text-xs text-muted-foreground">
-                    {error}
-                  </p>
-                )}
-              </DialogContent>
-            </Dialog>
+            <WalletDialog>
+              <Button size="lg">
+                <Wallet />
+                {account ? shortenAddress(account) : "Connect wallet"}
+              </Button>
+            </WalletDialog>
 
             {account && (
-              <span className="font-mono text-xs text-muted-foreground">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-foreground"
+                />
                 Connected
               </span>
             )}
