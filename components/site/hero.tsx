@@ -3,6 +3,7 @@ import { ArrowRight, Play, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { HeroBars } from "@/components/site/hero-bars";
+import { BlurIn, BlurWords } from "@/components/site/blur-in";
 
 export function Hero() {
   return (
@@ -15,41 +16,54 @@ export function Hero() {
       </div>
 
       <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center justify-center gap-5">
-        <Link
-          href="#protocole"
-          className="group flex w-fit items-center gap-2 rounded-full border bg-card px-3 py-1.5 shadow-xs transition-colors hover:bg-muted active:scale-98"
-        >
-          <Sparkles className="size-3" />
-          <span aria-hidden className="block h-4 border-l" />
-          <span className="text-xs">Déblocage progressif natif</span>
-          <span aria-hidden className="block h-4 border-l" />
-          <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        <BlurIn delay={0.1} duration={1.1} blur={8} y={10}>
+          <Link
+            href="#protocole"
+            className="group flex w-fit items-center gap-2 rounded-full border bg-card px-3 py-1.5 shadow-xs transition-colors hover:bg-muted active:scale-98"
+          >
+            <Sparkles className="size-3" />
+            <span aria-hidden className="block h-4 border-l" />
+            <span className="text-xs">Déblocage progressif natif</span>
+            <span aria-hidden className="block h-4 border-l" />
+            <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </BlurIn>
 
         <h1 className="text-center text-4xl tracking-tight text-balance [text-shadow:0_0_50px_--theme(--color-foreground/.2)] md:text-5xl lg:text-6xl">
-          Le launchpad optimisé pour la découverte du prix
+          <BlurWords
+            text="Le launchpad optimisé pour la découverte du prix"
+            delay={0.25}
+            stagger={0.055}
+            duration={0.95}
+            blur={14}
+            y={18}
+          />
         </h1>
 
-        <p className="mx-auto max-w-lg text-center text-sm tracking-wide text-foreground/80 sm:text-lg">
-          Des marchés plus efficaces, plus équitables et plus durables. Les
-          règles sont connues à l&apos;avance, et une sortie raisonnable reste
-          toujours possible.
-        </p>
+        <BlurIn delay={0.85} duration={1.1} blur={10} y={14}>
+          <p className="mx-auto max-w-lg text-center text-sm tracking-wide text-foreground/80 sm:text-lg">
+            Des marchés plus efficaces, plus équitables et plus durables. Les
+            règles sont connues à l&apos;avance, et une sortie raisonnable reste
+            toujours possible.
+          </p>
+        </BlurIn>
 
-        <div className="flex flex-row flex-wrap items-center justify-center gap-3 pt-2">
-          <Button variant="card" size="lg" asChild>
-            <Link href="#demo">
-              <Play />
-              Voir la démo
-            </Link>
-          </Button>
-          <Button size="lg" asChild>
-            <Link href="#create">
-              Lancer un token
-              <ArrowRight />
-            </Link>
-          </Button>
-        </div>
+        <BlurIn delay={1.05} duration={1} blur={8} y={12}>
+          <div className="flex flex-row flex-wrap items-center justify-center gap-3 pt-2">
+            <Button variant="card" size="lg" asChild>
+              <Link href="#demo">
+                <Play />
+                Voir la démo
+              </Link>
+            </Button>
+            <Button size="lg" asChild>
+              <Link href="#create">
+                Lancer un token
+                <ArrowRight />
+              </Link>
+            </Button>
+          </div>
+        </BlurIn>
       </div>
 
       <HeroBars />
