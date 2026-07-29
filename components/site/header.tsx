@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { label: "Protocole", href: "#protocole", hasMenu: true },
-  { label: "Explorer", href: "#explorer", hasMenu: true },
+  { label: "Protocol", href: "#protocol", hasMenu: true },
+  { label: "Explore", href: "#explore", hasMenu: true },
   { label: "Docs", href: "#docs", hasMenu: false },
 ];
 
@@ -22,7 +22,7 @@ export function Header() {
       <div className="flex h-9 items-center gap-2">
         <Link
           href="/"
-          aria-label="Reveal, accueil"
+          aria-label="Reveal, home"
           className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-full px-3 hover:bg-muted"
         >
           <Image
@@ -40,7 +40,7 @@ export function Header() {
 
         <div aria-hidden className="h-6 shrink-0 bg-border md:w-px" />
 
-        <nav aria-label="Navigation principale" className="hidden md:block">
+        <nav aria-label="Main navigation" className="hidden md:block">
           <ul className="flex items-center">
             {NAV.map((item) => (
               <li key={item.label}>
@@ -65,7 +65,7 @@ export function Header() {
           size="icon"
           aria-controls="mobile-menu"
           aria-expanded={open}
-          aria-label="Ouvrir le menu"
+          aria-label="Open menu"
           onClick={() => setOpen((v) => !v)}
         >
           <span className="relative size-4">
@@ -82,17 +82,17 @@ export function Header() {
               )}
             />
           </span>
-          <span className="sr-only">Basculer le menu</span>
+          <span className="sr-only">Toggle menu</span>
         </Button>
       </div>
 
       <div className="hidden items-center gap-2 md:flex">
         <Button variant="outline" asChild>
-          <Link href="#app">Se connecter</Link>
+          <Link href="#app">Sign in</Link>
         </Button>
         <Button asChild>
           <Link href="#create">
-            Lancer un token
+            Launch a token
             <ArrowUpRight className="transition-transform group-hover/button:translate-x-0.5 group-hover/button:-translate-y-px" />
           </Link>
         </Button>
@@ -117,12 +117,12 @@ export function Header() {
             <div className="mt-2 flex flex-col gap-2">
               <Button variant="outline" asChild>
                 <Link href="#app" onClick={() => setOpen(false)}>
-                  Se connecter
+                  Sign in
                 </Link>
               </Button>
               <Button asChild>
                 <Link href="#create" onClick={() => setOpen(false)}>
-                  Lancer un token
+                  Launch a token
                   <ArrowUpRight />
                 </Link>
               </Button>

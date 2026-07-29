@@ -43,7 +43,7 @@ function TokenPill({ token }: { token: Token }) {
         <span aria-hidden>{positive ? "↑" : "↓"}</span>
         {Math.abs(token.change).toFixed(1)}%
         <span className="sr-only">
-          {positive ? "en hausse" : "en baisse"} sur 24 heures
+          {positive ? "up" : "down"} over 24 hours
         </span>
       </span>
     </div>
@@ -54,7 +54,7 @@ export function TokenMarquee() {
   return (
     <section className="pt-5 pb-10">
       <h2 className="mb-4 text-center text-lg font-medium tracking-tight text-muted-foreground md:text-xl">
-        Lancements <span className="text-foreground">en cours</span>
+        Live <span className="text-foreground">launches</span>
       </h2>
 
       <div className="relative">

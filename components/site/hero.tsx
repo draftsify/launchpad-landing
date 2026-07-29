@@ -18,12 +18,12 @@ export function Hero() {
       <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center justify-center gap-5">
         <BlurIn delay={0.1} duration={1.1} blur={8} y={10}>
           <Link
-            href="#protocole"
+            href="#protocol"
             className="group flex w-fit items-center gap-2 rounded-full border bg-card px-3 py-1.5 shadow-xs transition-colors hover:bg-muted active:scale-98"
           >
             <Sparkles className="size-3" />
             <span aria-hidden className="block h-4 border-l" />
-            <span className="text-xs">Déblocage progressif natif</span>
+            <span className="text-xs">Progressive unlocking, built in</span>
             <span aria-hidden className="block h-4 border-l" />
             <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -31,7 +31,7 @@ export function Hero() {
 
         <h1 className="text-center text-4xl tracking-tight text-balance [text-shadow:0_0_50px_--theme(--color-foreground/.2)] md:text-5xl lg:text-6xl">
           <BlurWords
-            text="Le launchpad optimisé pour la découverte du prix"
+            text="The launchpad optimized for real price discovery"
             delay={0.25}
             stagger={0.055}
             duration={0.95}
@@ -42,9 +42,8 @@ export function Hero() {
 
         <BlurIn delay={0.85} duration={1.1} blur={10} y={14}>
           <p className="mx-auto max-w-lg text-center text-sm tracking-wide text-foreground/80 sm:text-lg">
-            Des marchés plus efficaces, plus équitables et plus durables. Les
-            règles sont connues à l&apos;avance, et une sortie raisonnable reste
-            toujours possible.
+            Markets that are more efficient, fairer and more sustainable. The
+            rules are known upfront, and a reasonable exit always stays open.
           </p>
         </BlurIn>
 
@@ -53,12 +52,12 @@ export function Hero() {
             <Button variant="card" size="lg" asChild>
               <Link href="#demo">
                 <Play />
-                Voir la démo
+                Watch demo
               </Link>
             </Button>
             <Button size="lg" asChild>
               <Link href="#create">
-                Lancer un token
+                Launch a token
                 <ArrowRight />
               </Link>
             </Button>

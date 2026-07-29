@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Reveal — Price Discovery Protocol",
   description:
-    "Le premier launchpad optimisé pour la découverte du prix. Des marchés plus efficaces, plus équitables et plus durables, avec des règles connues à l'avance.",
+    "The launchpad optimized for price discovery. More efficient, fairer and more sustainable markets, with rules known upfront and a reasonable exit always open.",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="fr"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">

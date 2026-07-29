@@ -2,8 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 
 const LINKS = [
-  { label: "Protocole", href: "#protocole" },
-  { label: "Explorer", href: "#explorer" },
+  { label: "Protocol", href: "#protocol" },
+  { label: "Explore", href: "#explore" },
   { label: "Docs", href: "#docs" },
 ];
 
@@ -25,7 +25,7 @@ export function Footer() {
         </Link>
 
         <nav
-          aria-label="Navigation pied de page"
+          aria-label="Footer navigation"
           className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:ml-auto"
         >
           {LINKS.map((link) => (
