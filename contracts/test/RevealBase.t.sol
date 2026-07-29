@@ -70,6 +70,7 @@ abstract contract RevealBase is Test {
             address(weth),
             FEE,
             CARDINALITY,
+            SUPPLY,
             _range(TICK_LOW, TICK_HIGH),
             // Quand notre token est token1 le prix s'inverse : la plage est la
             // symétrique par rapport à zéro, bornes échangées.
@@ -109,7 +110,7 @@ abstract contract RevealBase is Test {
     function _launch(Rules memory rules) internal {
         vm.prank(creator);
         (address t, address p) =
-            launcher.launch("Reveal", "REVEAL", METADATA_URI, SUPPLY, rules);
+            launcher.launch("Reveal", "REVEAL", METADATA_URI, rules);
         token = RevealToken(t);
         pool = IUniswapV3Pool(p);
         tokenFirst = token.tokenIsToken0();

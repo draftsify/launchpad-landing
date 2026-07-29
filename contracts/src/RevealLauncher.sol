@@ -47,6 +47,13 @@ contract RevealLauncher is IUniswapV3MintCallback {
     address public immutable quote;
     uint24 public immutable fee;
     uint16 public immutable observationCardinality;
+    /**
+     * Supply identique pour tout lancement. Ce n'est pas un choix esthétique :
+     * la plage de ticks fixe un prix par token, donc la capitalisation de
+     * départ vaut supply × ce prix. Laisser la supply varier ferait varier la
+     * capitalisation initiale dans la même proportion.
+     */
+    uint256 public immutable supply;
 
     Range public rangeIfToken0;
     Range public rangeIfToken1;
@@ -81,6 +88,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
         address quote_,
         uint24 fee_,
         uint16 observationCardinality_,
+        uint256 supply_,
         Range memory rangeIfToken0_,
         Range memory rangeIfToken1_
     ) {
@@ -91,6 +99,8 @@ contract RevealLauncher is IUniswapV3MintCallback {
         quote = quote_;
         fee = fee_;
         observationCardinality = observationCardinality_;
+        if (supply_ < 1e18 || supply_ > 1e36) revert SupplyOutOfRange();
+        supply = supply_;
         rangeIfToken0 = rangeIfToken0_;
         rangeIfToken1 = rangeIfToken1_;
     }
@@ -114,11 +124,8 @@ contract RevealLauncher is IUniswapV3MintCallback {
         string calldata name,
         string calldata symbol,
         string calldata metadataURI,
-        uint256 supply,
         Rules calldata rules
     ) external returns (address token, address pool) {
-        if (supply < 1e18 || supply > 1e36) revert SupplyOutOfRange();
-
         // `validate` tourne aussi dans le constructeur du token ; ici elle évite
         // de déployer quoi que ce soit quand les règles sont invalides.
         RevealRules.validate(rules);
@@ -129,7 +136,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
         if (ammFactory.getPool(token, quote, fee) != address(0)) revert PoolAlreadyExists();
         pool = ammFactory.createPool(token, quote, fee);
 
-        Range memory r = _seed(pool, token, supply);
+        Range memory r = _seed(pool, token);
 
         // Sans cet appel la cardinalité vaut 1 : aucun historique, donc aucun
         // TWAP, donc aucun drawdown relief tant que le pool n'a pas grandi.
@@ -148,7 +155,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
      * alors une quantité nulle de l'autre actif, ce qui est précisément la
      * définition d'une position unilatérale.
      */
-    function _seed(address pool, address token, uint256 supply)
+    function _seed(address pool, address token)
         private
         returns (Range memory r)
     {

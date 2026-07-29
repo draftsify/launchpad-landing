@@ -18,7 +18,6 @@ import { XIcon } from "@/components/x-icon";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
 import {
-  LAUNCH_LIQUIDITY_ETH,
   PRESETS,
   formatDuration,
   type Rules,
@@ -130,7 +129,6 @@ export function CreateForm() {
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
   const [discord, setDiscord] = useState("");
-  const [supply, setSupply] = useState("1000000000");
   const [presetId, setPresetId] = useState(PRESETS[0].id);
   const [rules, setRules] = useState<Rules>(PRESETS[0].rules);
   const [advanced, setAdvanced] = useState(false);
@@ -340,46 +338,8 @@ export function CreateForm() {
           </div>
         </Section>
 
-        <Section step="03" title="Supply">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Total supply" htmlFor="token-supply">
-              <input
-                id="token-supply"
-                value={supply}
-                onChange={(e) =>
-                  setSupply(e.target.value.replace(/[^0-9]/g, "").slice(0, 15))
-                }
-                inputMode="numeric"
-                className={cn(inputClass, "font-mono tabular-nums")}
-              />
-            </Field>
-
-            {/* Affiché sans être modifiable : le créateur ne le paie pas, mais
-                c'est l'échelle contre laquelle son plafond d'impact se mesure —
-                « 1 % de la liquidité » n'a de sens qu'avec ce référent. */}
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Initial liquidity</p>
-              <div className="flex h-10 items-center gap-2 rounded-xl border border-dashed bg-muted/30 px-3">
-                <span className="font-mono text-xs text-muted-foreground">
-                  ETH
-                </span>
-                <span className="font-mono text-sm tabular-nums">
-                  {LAUNCH_LIQUIDITY_ETH}
-                </span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  Provided by Reveal
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                The protocol seeds the pool and burns the LP tokens, so nobody
-                can pull the liquidity out. You pay gas only.
-              </p>
-            </div>
-          </div>
-        </Section>
-
         <Section
-          step="04"
+          step="03"
           title="Selling rules"
           hint="The part no other launchpad asks you. These are immutable once deployed."
         >
@@ -616,8 +576,6 @@ export function CreateForm() {
           <dl className="space-y-1.5 border-t pt-4 text-xs">
             {[
               ["Preset", activePreset?.label ?? "Custom"],
-              ["Supply", supply ? Number(supply).toLocaleString("en-US") : "—"],
-              ["Liquidity", `${LAUNCH_LIQUIDITY_ETH} ETH — seeded`],
               ["Your cost", "Gas only"],
               ["First buy opens", `${rules.launchDelay}s after deploy`],
             ].map(([label, value]) => (

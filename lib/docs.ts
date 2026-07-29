@@ -89,22 +89,6 @@ export const UNLOCK_PARAMS: Param[] = [
     description:
       "Seconds for a position to reach fully sellable, before any size or drawdown adjustment.",
   },
-  {
-    name: "unlockCurve",
-    type: "uint8",
-    range: "0 linear · 1 ease-out",
-    fallback: "1",
-    description:
-      "Shape of the schedule. Ease-out front-loads liquidity, which suits launches where early buyers take the most risk.",
-  },
-  {
-    name: "sizePenalty",
-    type: "uint16",
-    range: "0 – 10000 bps",
-    fallback: "2500",
-    description:
-      "How much a position's share of liquidity stretches its own unlock duration. A wallet holding 10% of the pool waits materially longer than one holding 0.1%.",
-  },
 ];
 
 export const RELIEF_PARAMS: Param[] = [
@@ -167,7 +151,7 @@ export const SNIPER_PARAMS: Param[] = [
     range: "1 – 500 bps",
     fallback: "50",
     description:
-      "Starting cap on a single buy, as a share of liquidity, at the opening of the ramp.",
+      "Starting cap on a single buy, as a share of total supply, at the opening of the ramp.",
   },
 ];
 

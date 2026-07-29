@@ -303,10 +303,22 @@ contract RevealToken is ERC20 {
     function _recordEntry(address to, uint256 value) private {
         Position storage p = positions[to];
         uint256 held = balanceOf(to);
-        // Ici le repli sur le spot est acceptable : gonfler artificiellement
-        // son propre prix d'entrée coûte de l'argent réel et ne rapporte qu'un
-        // relief futur, alors que le refuser bloquerait les premiers achats.
-        (int24 tick,) = twapTick();
+
+        /**
+         * Le prix d'entrée se relève au spot, jamais au TWAP — asymétrie
+         * délibérée avec `drawdownTicks`, qui lui exige le TWAP.
+         *
+         * Le TWAP retarde de plusieurs minutes. Pendant une montée rapide, un
+         * acheteur se verrait attribuer un prix très inférieur à celui qu'il a
+         * réellement payé, paraîtrait durablement en gain, et n'obtiendrait
+         * jamais le relief auquel sa perte réelle lui donne droit.
+         *
+         * Le spot est sûr ici : v3 met slot0 à jour avant de nous appeler, donc
+         * c'est le prix marginal que l'acheteur vient de payer. Le manipuler à
+         * la hausse pour se ménager un relief futur suppose d'acheter soi-même
+         * à ce prix gonflé — la perte est alors réelle, et le relief mérité.
+         */
+        (, int24 tick,,,,,) = IUniswapV3Pool(pool).slot0();
 
         if (held == 0) {
             p.entryTime = uint64(block.timestamp);

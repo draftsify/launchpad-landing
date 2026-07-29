@@ -1,166 +1,132 @@
 # Reveal — contracts
 
-The protocol itself: a token whose transfer hook meters selling instead of
-forbidding it. No admin, no pause, no allowlist — every parameter is chosen at
-launch and there is no function that can change one afterwards.
+The protocol itself: a token whose transfer hook meters selling. No admin, no
+pause, no allowlist — every parameter is chosen at launch and there is no
+function that can change one afterwards.
 
 ```
-RevealLauncher.launch()  →  RevealToken  +  Uniswap V2 pair  (LP burned)
+RevealLauncher.launch()  →  RevealToken  +  Uniswap V3 pool  (position locked)
 ```
 
-## Who pays for the pool
+## Nobody funds a launch
 
-The launcher's own treasury does. A creator pays gas and nothing else.
+The whole supply is placed in a V3 tick range on one side of the starting
+price, so the position is 100% token and 0% quote. Buyers' ETH is what becomes
+the liquidity, as their trades push the price through the range. A creator pays
+gas and nothing else.
 
-Uniswap never supplies capital — a pair is created empty and its price is set by
-whoever first deposits both sides. Here that is `RevealLauncher`, funded by
-anyone who sends it ETH. **There is no withdrawal function**: the treasury's only
-exit is into a pool whose LP tokens are burned, so no key controls the money.
+Uniswap V2 cannot do this — it requires both sides of a pair — which is the
+real reason this runs on V3, not any security argument.
 
-That makes the treasury **wastable, not stealable**. A launch puts the liquidity
-against the entire supply and burns the LP; the caller receives no tokens, and
-taking ETH out of the pool means putting ETH in first. The exposure is capital
-exhaustion, not theft — so the defence is a spend budget over a sliding window
-(`budgetPerWindow` / `budgetWindow`, the same leaky bucket as the impact cap)
-rather than a fee, which would contradict "gas only".
+The position is minted to `0xdEaD`. A V3 position is keyed by
+`(owner, tickLower, tickUpper)`, so nobody can ever call `burn` or `collect` on
+it: neither the liquidity nor the fees it accrues can leave.
 
-This bounds the damage; it does not prevent a determined spammer from consuming
-a window. A small launch fee is the obvious second lever if that happens.
-`canLaunch()` exists so the interface can check before a creator spends gas.
+Supply is fixed at the launcher, not chosen per token. The tick range fixes a
+price per token, so opening market cap is supply × that price — a variable
+supply would move the opening valuation with it.
 
 ## The three gates
 
 Every transfer passes through `RevealToken._update`, in this order.
 
-**1. Anti-sniper** — on buys, for the first minutes.
-`launchDelay` blocks buys outright. Then `buyRamp` caps a single buy as a share
-of the pool reserve, starting at 0.25% and reaching "no limit" at the end of the
-ramp.
+**1. Anti-sniper** — on buys, for the first minutes. `launchDelay` blocks buys
+outright; then `buyRamp` caps a single buy as a share of total supply, from
+0.25% up to unrestricted. Total supply is the denominator deliberately: the
+pool's balance is the whole supply at launch, and circulating supply is zero —
+measuring against either would make the first buy impossible or unbounded.
 
-**2. Unlock** — on anything leaving a position.
-A position unlocks linearly from `initialUnlockBps` to 100% over `unlockSeconds`,
-counted from *entry*, not from launch. Buying again re-weights the entry time
-downward, so topping up makes you younger.
+**2. Unlock** — on anything leaving a position. Linear from `initialUnlockBps`
+to 100% over `unlockSeconds`, counted from *entry*. Buying again re-weights
+entry time downward.
 
-Drawdown relief raises that as a **floor**, never a bonus: a position down `d`
-is unlocked at least `2 × d`, so −50% opens it entirely. The reference price is
-a 5-minute TWAP read from the pair's own cumulative counters — pushing spot down
-for one block does not move it.
+Drawdown relief raises that as a **floor**: 6,932 ticks below entry is a
+halving, and a halving releases the position entirely. Measured in ticks
+because V3's oracle returns a tick, and 1.0001^n is not something to compute
+on-chain.
 
-The budget is measured against `basisAmount` (everything the position ever
-received) minus `releasedTotal`, not against the current balance. Measuring
-against the balance is the obvious mistake: selling 10% would immediately reopen
-10% of the remainder, and a position would drain in a few transactions.
-`test_SellingDoesNotReopenTheSameShare` pins this.
+The budget is `basisAmount` (everything the position ever received) minus
+`releasedTotal`, never the current balance — against the balance, selling 10%
+reopens 10% of the remainder and a position drains in a few transactions.
+Plain transfers consume the same budget, so splitting across addresses does not
+walk through the gate.
 
-Plain transfers consume the same budget as sells. Otherwise splitting a position
-across ten addresses would walk straight through the gate.
+**3. Impact cap** — on sells into the pool. `impactCapBps` of the quote reserve
+per `impactWindow`, as a leaky bucket that decays rather than resetting on a
+boundary. Denominated in quote, not tokens: on the token side it would equal
+the entire supply at launch. Consequence, intended: nothing is sellable until
+someone has bought.
 
-**3. Impact cap** — on sells into the pool.
-`impactCapBps` of the pool's token reserve per `impactWindow`, as a leaky bucket:
-what you already sold decays linearly over the window rather than resetting on a
-boundary, so you cannot sell two full caps by straddling one.
+## Two asymmetries that are load-bearing
 
-## Why Uniswap v2 and not v3 or v4
+**Entry price is spot; current price is TWAP.** The TWAP lags by minutes, so
+using it for entry would credit a buyer during a fast run-up with a price far
+below what they paid — they would look permanently in profit and never earn the
+relief their real loss deserves. Spot is safe for entry: V3 updates `slot0`
+before calling us, so it is the marginal price just paid, and inflating it to
+manufacture future relief means buying at that inflated price. The current
+price must stay a TWAP, because that is the side where manipulation pays.
 
-All four — v2, v3, v4, UniswapX — are live on Robinhood Chain, so availability
-does not decide this. On the merits:
-
-- **The impact cap needs a reserve.** "1% of the pool" is exactly the reserve in
-  v2. In v3, `balanceOf(pool)` spans every tick range including liquidity that is
-  out of range and cannot absorb the trade, so the same formula stops being a
-  proxy for price impact.
-- **v4 works against a transfer hook, by design.** Its singleton PoolManager
-  holds every token in the protocol, so `to == pool` no longer means "a sell".
-  ERC-6909 claim tokens let a swap settle with no ERC-20 transfer at all. The
-  correct v4 shape is a hook contract on `beforeSwap` — which puts *more* of our
-  own code in the swap path, and still needs token-level restrictions to stop
-  anyone opening an unhooked pool for the same token.
-- **v2 is the smallest surface.** ~200 lines, six years in production, and we add
-  one hook. "Don't write your own AMM" is the right instinct and this follows it;
-  between versions, more machinery is not more safety.
-- Concentrated liquidity buys us nothing here: the launch position is full-range
-  and burned.
-
-Routing is not a reason to move either — the Universal Router and UniswapX quote
-v2 pairs, and the Uniswap Web App supports the chain, so a launched token is
-tradeable without us shipping a swap UI.
-
-Revisit if the impact cap ever needs to key off real liquidity depth rather than
-a reserve; that is the argument that would actually justify v3.
-
-## Metadata
-
-`RevealToken.metadataURI` is written at launch and has no setter. Image,
-description and links live behind it (IPFS in practice), so the interface can
-render a token by reading the chain alone.
+**The impact cap reads a mark taken on buys, never live during a sell.** V3
+sends the swap output *before* invoking the callback where our hook runs, so a
+live read is already short by the proceeds of the very sell being checked, and
+the view would promise more than the transaction accepts.
 
 ## Known limitations
 
-Read these before assuming the mechanism is airtight.
-
-- **The impact cap is per address.** A holder who is already fully unlocked can
-  split across N wallets and get N buckets. The unlock gate is what stops this
-  for young positions — a fresh wallet restarts at `initialUnlockBps` — but it
-  does not stop a holder who has waited out `unlockSeconds`. A global per-window
-  cap would close it; that is a product decision, not an oversight.
-- **Revert reasons do not survive the pool.** Uniswap wraps token transfers in
-  `_safeTransfer`, which replaces any reason with `UniswapV2: TRANSFER_FAILED`.
-  The frontend must call `sellableNow()` / `releasable()` / `windowRemaining()`
-  before sending a transaction rather than parsing a failure.
-  (`test_PoolMasksOurRevertReasons`)
-- **The cap tracks the reserve, so it grows as you sell.** It is an impact cap,
-  not a quantity cap: selling raises the token reserve, so 1% of it is slightly
-  more than before. A window therefore empties to about 1% of the cap rather
-  than to exactly zero.
-- **A stale TWAP can be farmed at the margin.** Buying right after a crash gives
-  you a basis from before it, so you look underwater and get relief. The gain is
-  bounded by the TWAP window and costs real capital to set up, but it exists.
-- **`RELIEF_SLOPE` is a protocol constant, not a launch parameter.** Letting a
-  creator tune the exit guarantee would be the same as removing it.
+- **Revert reasons do not survive the pool.** Uniswap wraps token transfers, so
+  any failure surfaces as `TF`. The frontend must call `sellableNow()` /
+  `releasable()` / `windowRemaining()` before sending a transaction rather than
+  parsing a failure. The incumbent launchpad on this chain removed its trading
+  restrictions in V2 for exactly this reason — third-party apps were seeing
+  unexplained failed transactions. Keeping the restrictions is a deliberate
+  product choice made with that precedent in view.
+- **The impact cap is per address.** A fully-unlocked holder can split across
+  wallets and get one bucket each. The unlock gate stops this for young
+  positions — a fresh wallet restarts at `initialUnlockBps` — but not for one
+  that waited out `unlockSeconds`.
+- **A second pool at another fee tier is not covered.** Sells routed there are
+  treated as plain transfers: still charged against the unlock budget, but
+  outside the impact cap.
+- **The TWAP needs trading history.** With too few swaps for the configured
+  observation cardinality, `observe` reverts and no relief is granted — the
+  conservative direction, but relief becomes unavailable rather than
+  approximate.
 - **Not audited.** Nothing here has been reviewed by anyone but its tests.
 
 ## Running it
 
 ```bash
 forge build
-forge test                                              # 26 tests, no network
-FORK_ROBINHOOD=1 forge test --match-contract Fork -vv   # + 2 against the live chain
+forge test          # 13 tests
 ```
 
-The fork tests run the protocol against Robinhood Chain's canonical Uniswap v2
-factory and its real WETH — the things a mock cannot vouch for. They skip
-themselves without `FORK_ROBINHOOD`, so the default suite stays offline.
+Tests trade through a minimal router that pays by `transferFrom` from the
+account swapping — the exact sequence the hook sees when a real router fills an
+order.
 
-Tests trade directly against the pair rather than through the router: that is
-exactly the call sequence the transfer hook sees, and it avoids depending on the
-init-code hash baked into `UniswapV2Library`.
-
-`lib/v2-core` is Solidity 0.5.16 and cannot be imported from a 0.8 test, so
-`test/mocks/UniswapV2Artifacts.sol` exists only to force its compilation;
-the tests then instantiate it through `deployCode`.
+v3-core is Solidity 0.7.6 and cannot be imported from a 0.8 test, so
+`test/mocks/UniswapV3Artifacts.sol` forces its compilation and the tests
+instantiate it with `deployCode`. `TickMath` does not compile under 0.8 at all;
+`TickMathExposer` publishes the canonical version so the range constants are
+computed rather than transcribed by hand.
 
 ## Deploying
 
 ```bash
+cast wallet import deployer --interactive
 forge script script/Deploy.s.sol:Deploy --rpc-url robinhood \
-  --account <keystore-name> --broadcast
+  --account deployer --broadcast
 ```
 
 Robinhood Chain is chain ID 4663, Arbitrum Orbit, and contract deployment is
-permissionless. The script has its addresses built in, verified on-chain:
+permissionless. Addresses are built in, verified on-chain:
 
 | | |
 |---|---|
-| UniswapV2Factory | `0x8bcEaA40B9AcdfAedF85AdF4FF01F5Ad6517937f` |
+| UniswapV3Factory | `0x1f7d7550B1b028f7571E69A784071F0205FD2EfA` |
 | WETH | `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73` |
 
 Do **not** assume the OP-stack WETH predeploy `0x4200…0006` — this is an Orbit
-chain and that address holds no code here. The script reverts rather than
-deploying against a WETH it cannot name.
-
-On any other chain, pass `AMM_FACTORY` and `WETH`; if `AMM_FACTORY` is omitted
-the script deploys a v2 factory, which is what a bare testnet needs.
-
-Use `--account` with a `cast wallet import` keystore rather than putting a
-private key in the environment.
+chain and that address holds no code here. On any other chain pass
+`AMM_FACTORY` and `WETH`; the script reverts rather than guessing.

@@ -86,19 +86,21 @@ export default function DocsPage() {
             >
               <Code>{`import { createToken } from "@reveal/sdk";
 
+// Supply and liquidity are not yours to set. Supply is fixed by the
+// launcher, and the pool is seeded one-sided with it -- buyers' ETH
+// becomes the liquidity. You pay gas.
 const token = await createToken({
   name: "Reveal",
   symbol: "REVEAL",
-  supply: 1_000_000_000n,
-  liquidity: parseEther("40"),
+  metadataURI: "ipfs://...",  // image, description, links
 
   rules: {
     initialUnlock: 1000,      // 10% sellable from block one
     unlockDuration: 86_400,   // fully unlocked after 24h
-    sizePenalty: 2500,        // large positions unlock slower
-    impactCap: 100,           // 1% of liquidity...
+    impactCap: 1000,          // 10% of the quote reserve...
     impactWindow: 300,        // ...per 5 minute window
     launchDelay: 30,          // no buys for the first 30s
+    buyRamp: 600,             // buy size opens up over 10 minutes
   },
 });`}</Code>
               <Prose>
@@ -164,23 +166,24 @@ const token = await createToken({
               lede="The unit of accounting is the buy, not the wallet."
             >
               <Prose>
-                Every buy creates a position. Selling limits are computed per
-                position, so two buys made hours apart unlock on their own
-                schedules even though they sit in the same wallet.
+                A wallet holds one position, and every buy folds into it:
+                entry time and entry price are re-weighted by amount. Topping
+                up therefore makes a position younger, which is exactly what
+                the rule should do.
               </Prose>
               <Code>{`struct Position {
-    address owner;
-    uint128 amount;        // tokens bought
-    uint128 sold;          // tokens already released
-    uint128 entryPrice;    // TWAP at entry
-    uint128 entryLiquidity;// pool depth at entry, sizes the penalty
-    uint64  openedAt;
+    uint64  entryTime;      // weighted average, moves down on every buy
+    int24   basisTick;      // spot tick at entry, not TWAP
+    uint128 basisAmount;    // everything the position ever received
+    uint128 releasedTotal;  // what it has already let out
+    uint128 soldInWindow;   // leaky bucket for the impact cap
+    uint64  soldAt;
 }`}</Code>
               <Prose>
-                A sell consumes positions oldest-first. That ordering is
-                deliberate: it releases the tokens that have waited longest,
-                which is both the friendlier default for holders and the harder
-                one to game.
+                The unlock budget is measured against everything the position
+                ever received, minus what it has already released — never
+                against the current balance. Against the balance, selling 10%
+                would immediately reopen 10% of the remainder.
               </Prose>
             </DocSection>
 
@@ -189,13 +192,13 @@ const token = await createToken({
               title="Computing the sellable amount"
               lede="Three inputs, then a cap."
             >
-              <Code>{`sellable(position) =
-    amount
-  * max( timeUnlock(elapsed, duration, sizePenalty),
-         reliefUnlock(drawdown) )
-  - sold
+              <Code>{`releasable(position) =
+    basisAmount
+  * max( timeUnlock(elapsed, duration),
+         reliefUnlock(ticksBelowEntry) )
+  - releasedTotal
 
-executable = min( sellable, remainingWindowAllowance(wallet) )`}</Code>
+executable = min( releasable, remainingWindowAllowance(wallet) )`}</Code>
               <Prose>
                 Relief is a floor, not an addition. A position deep in drawdown
                 never unlocks <em>less</em> than its schedule already permits,
@@ -251,11 +254,11 @@ executable = min( sellable, remainingWindowAllowance(wallet) )`}</Code>
                 for one block, unlock their entire position under maximum
                 relief, and sell into the recovery.
               </Prose>
-              <Code>{`// 30 minute TWAP, read from the pool's accumulator
-uint256 reference = pool.consult(TWAP_WINDOW);
-uint256 drawdown  = entryPrice > reference
-    ? (entryPrice - reference) * 10_000 / entryPrice
-    : 0;`}</Code>
+              <Code>{`// 5 minute TWAP, read from the pool's own tick accumulator.
+// Ticks, not prices: 1.0001^n is not worth computing on chain.
+int24  reference = twapTick();          // reverts -> no relief at all
+uint256 drop     = ticksBelow(basisTick, reference);
+uint256 relief   = drop * 10_000 / 6_932;   // 6932 ticks = a halving`}</Code>
               <Prose>
                 A longer window costs responsiveness during a genuine crash; a
                 shorter one lowers the cost of manipulating relief. Thirty
@@ -273,10 +276,11 @@ uint256 drawdown  = entryPrice > reference
             >
               <ParamTable params={UNLOCK_PARAMS} />
               <Prose>
-                <Inline>sizePenalty</Inline> is what stops a whale from holding
-                the same schedule as a small buyer. At the default of 2500 bps,
-                a position worth 10% of pool liquidity takes roughly a quarter
-                longer to unlock than a negligible one.
+                The schedule does not depend on position size — a whale and a
+                small buyer unlock on the same curve. What separates them is the
+                impact cap, which is measured against the pool rather than
+                against the holder. Making the schedule itself size-aware is an
+                open design question, not a shipped feature.
               </Prose>
             </DocSection>
 
@@ -435,7 +439,7 @@ const sellable = positions
                   {
                     term: "Oracle manipulation",
                     description:
-                      "A sufficiently capitalised actor can move a 30 minute TWAP. Deeper initial liquidity raises that cost more than any parameter here.",
+                      "A sufficiently capitalised actor can move a 5 minute TWAP. Deeper liquidity raises that cost more than any parameter here — and since buyers are the liquidity, it deepens as a launch succeeds.",
                   },
                   {
                     term: "Immutability cuts both ways",

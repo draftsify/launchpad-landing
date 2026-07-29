@@ -140,20 +140,31 @@ contract RevealGatesTest is RevealBase {
 
     // ------------------------------------------------------- drawdown relief
 
-    function test_NoReliefWithoutTwapHistory() public {
+    /**
+     * La garantie qui compte : faire plonger le prix le temps d.un bloc ne
+     * debloque rien. Le relief se mesure au TWAP, donc il faut tenir le prix
+     * bas pendant toute la fenetre pour qu.il bouge.
+     */
+    function test_ASingleBlockCrashDoesNotOpenThePosition() public {
         _pastRamp();
-        _buy(alice, 0.05 ether);
-        // Sans historique d'oracle, aucun relief : retomber sur le spot
-        // laisserait manipuler le prix d'un bloc pour se debloquer.
-        assertEq(token.drawdownTicks(alice), 0);
+        _buy(whale, 2 ether);
+        _buy(alice, 0.2 ether);
+        _warp(10 minutes);
+        _fullyUnlock();
+
+        uint256 before = token.drawdownTicks(alice);
+
+        // Dump massif, sans laisser le temps passer.
+        uint256 room = token.windowRemaining(whale);
+        _sell(whale, room);
+        assertApproxEqAbs(token.drawdownTicks(alice), before, 5, "le spot ne compte pas");
+
+        // Le meme prix, tenu une fenetre entiere, finit par compter.
+        _warp(10 minutes);
+        assertGt(token.drawdownTicks(alice), before, "le TWAP a rattrape");
     }
 
-    /// EN COURS : la perte latente ressort a zero apres le portage V3. Reste a
-    /// determiner si le TWAP n(')est pas encore frais ou si le signe du tick est
-    /// inverse dans un des deux ordres de tokens. Le relief est donc NON VERIFIE
-    /// sur V3 : ne pas deployer avant.
     function test_ReliefOpensThePositionWhenPriceFalls() public {
-        vm.skip(true);
         _pastRamp();
         _buy(whale, 2 ether);
         _buy(alice, 0.2 ether);
