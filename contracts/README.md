@@ -41,6 +41,40 @@ across ten addresses would walk straight through the gate.
 what you already sold decays linearly over the window rather than resetting on a
 boundary, so you cannot sell two full caps by straddling one.
 
+## Why Uniswap v2 and not v3 or v4
+
+All four — v2, v3, v4, UniswapX — are live on Robinhood Chain, so availability
+does not decide this. On the merits:
+
+- **The impact cap needs a reserve.** "1% of the pool" is exactly the reserve in
+  v2. In v3, `balanceOf(pool)` spans every tick range including liquidity that is
+  out of range and cannot absorb the trade, so the same formula stops being a
+  proxy for price impact.
+- **v4 works against a transfer hook, by design.** Its singleton PoolManager
+  holds every token in the protocol, so `to == pool` no longer means "a sell".
+  ERC-6909 claim tokens let a swap settle with no ERC-20 transfer at all. The
+  correct v4 shape is a hook contract on `beforeSwap` — which puts *more* of our
+  own code in the swap path, and still needs token-level restrictions to stop
+  anyone opening an unhooked pool for the same token.
+- **v2 is the smallest surface.** ~200 lines, six years in production, and we add
+  one hook. "Don't write your own AMM" is the right instinct and this follows it;
+  between versions, more machinery is not more safety.
+- Concentrated liquidity buys us nothing here: the launch position is full-range
+  and burned.
+
+Routing is not a reason to move either — the Universal Router and UniswapX quote
+v2 pairs, and the Uniswap Web App supports the chain, so a launched token is
+tradeable without us shipping a swap UI.
+
+Revisit if the impact cap ever needs to key off real liquidity depth rather than
+a reserve; that is the argument that would actually justify v3.
+
+## Metadata
+
+`RevealToken.metadataURI` is written at launch and has no setter. Image,
+description and links live behind it (IPFS in practice), so the interface can
+render a token by reading the chain alone.
+
 ## Known limitations
 
 Read these before assuming the mechanism is airtight.
@@ -70,9 +104,13 @@ Read these before assuming the mechanism is airtight.
 
 ```bash
 forge build
-forge test            # 25 tests
-forge test -vvv       # with traces
+forge test                                              # 26 tests, no network
+FORK_ROBINHOOD=1 forge test --match-contract Fork -vv   # + 2 against the live chain
 ```
+
+The fork tests run the protocol against Robinhood Chain's canonical Uniswap v2
+factory and its real WETH — the things a mock cannot vouch for. They skip
+themselves without `FORK_ROBINHOOD`, so the default suite stays offline.
 
 Tests trade directly against the pair rather than through the router: that is
 exactly the call sequence the transfer hook sees, and it avoids depending on the
@@ -85,10 +123,24 @@ the tests then instantiate it through `deployCode`.
 ## Deploying
 
 ```bash
-export PRIVATE_KEY=0x…
-forge script script/Deploy.s.sol:Deploy --rpc-url $BASE_SEPOLIA_RPC --broadcast
+forge script script/Deploy.s.sol:Deploy --rpc-url robinhood \
+  --account <keystore-name> --broadcast
 ```
 
-`AMM_FACTORY` is optional — the script deploys a Uniswap V2 factory when the
-chain has none, which is the usual case on a testnet. `WETH` defaults to the
-OP-stack predeploy at `0x4200…0006`.
+Robinhood Chain is chain ID 4663, Arbitrum Orbit, and contract deployment is
+permissionless. The script has its addresses built in, verified on-chain:
+
+| | |
+|---|---|
+| UniswapV2Factory | `0x8bcEaA40B9AcdfAedF85AdF4FF01F5Ad6517937f` |
+| WETH | `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73` |
+
+Do **not** assume the OP-stack WETH predeploy `0x4200…0006` — this is an Orbit
+chain and that address holds no code here. The script reverts rather than
+deploying against a WETH it cannot name.
+
+On any other chain, pass `AMM_FACTORY` and `WETH`; if `AMM_FACTORY` is omitted
+the script deploys a v2 factory, which is what a bare testnet needs.
+
+Use `--account` with a `cast wallet import` keystore rather than putting a
+private key in the environment.

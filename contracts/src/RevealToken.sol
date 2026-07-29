@@ -48,6 +48,13 @@ contract RevealToken is ERC20 {
     address public immutable launcher;
     Rules public rules;
 
+    /**
+     * Pointeur vers l'image, la description et les liens du token — IPFS en
+     * pratique. Écrit une fois, sans setter : c'est ce qui permet à l'interface
+     * de tout afficher sans base de données, en ne lisant que la chaîne.
+     */
+    string public metadataURI;
+
     address public pair;
     bool public tokenIsToken0;
     uint64 public launchedAt;
@@ -72,12 +79,17 @@ contract RevealToken is ERC20 {
     error PositionLocked(uint256 releasable);
     error ImpactCapExceeded(uint256 remaining);
 
-    constructor(string memory name_, string memory symbol_, uint256 supply, Rules memory rules_)
-        ERC20(name_, symbol_)
-    {
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        string memory metadataURI_,
+        uint256 supply,
+        Rules memory rules_
+    ) ERC20(name_, symbol_) {
         if (supply > MAX_SUPPLY) revert SupplyTooLarge();
         RevealRules.validate(rules_);
         rules = rules_;
+        metadataURI = metadataURI_;
         launcher = msg.sender;
         _mint(msg.sender, supply);
     }

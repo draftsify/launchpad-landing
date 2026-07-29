@@ -42,6 +42,12 @@ contract RevealTokenTest is RevealBase {
         assertEq(buyRamp, r.buyRamp);
     }
 
+    /// L'interface lit image, description et liens ici : rien ne l'oblige a
+    /// interroger un serveur pour afficher un token.
+    function test_MetadataUriIsOnChainAndHasNoSetter() public view {
+        assertEq(token.metadataURI(), METADATA_URI);
+    }
+
     function test_InitializeIsSingleShotAndLauncherOnly() public {
         vm.expectRevert(RevealToken.AlreadyInitialized.selector);
         vm.prank(address(launcher));
@@ -311,7 +317,7 @@ contract RevealTokenTest is RevealBase {
         vm.expectRevert(
             abi.encodeWithSelector(RevealLauncher.WrongLiquidity.selector, LIQUIDITY)
         );
-        launcher.launch{value: 1 ether}("X", "X", SUPPLY, defaultRules());
+        launcher.launch{value: 1 ether}("X", "X", "", SUPPLY, defaultRules());
     }
 
     function test_LaunchRejectsImpossibleRules() public {
@@ -321,14 +327,14 @@ contract RevealTokenTest is RevealBase {
         vm.deal(creator, LIQUIDITY);
         vm.prank(creator);
         vm.expectRevert(RevealRules.ImpactCapOutOfRange.selector);
-        launcher.launch{value: LIQUIDITY}("X", "X", SUPPLY, r);
+        launcher.launch{value: LIQUIDITY}("X", "X", "", SUPPLY, r);
     }
 
     function test_LaunchRejectsSupplyAboveTheCastBound() public {
         vm.deal(creator, LIQUIDITY);
         vm.prank(creator);
         vm.expectRevert(RevealLauncher.SupplyOutOfRange.selector);
-        launcher.launch{value: LIQUIDITY}("X", "X", 1e37, defaultRules());
+        launcher.launch{value: LIQUIDITY}("X", "X", "", 1e37, defaultRules());
     }
 
     // ------------------------------------------------------------------ fuzz

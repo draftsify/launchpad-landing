@@ -17,6 +17,7 @@ import {WETH9} from "./mocks/WETH9.sol";
 abstract contract RevealBase is Test {
     uint256 internal constant SUPPLY = 1_000_000_000e18;
     uint256 internal constant LIQUIDITY = 4 ether;
+    string internal constant METADATA_URI = "ipfs://bafyreiRevealDemoMetadataCid";
 
     WETH9 internal weth;
     IUniswapV2Factory internal amm;
@@ -45,6 +46,13 @@ abstract contract RevealBase is Test {
     }
 
     function setUp() public virtual {
+        _setUpEnvironment();
+        launcher = new RevealLauncher(address(amm), address(weth), LIQUIDITY);
+        _launch(defaultRules());
+    }
+
+    /// Surchargé par le test de fork, qui branche le vrai Uniswap d'une chaîne.
+    function _setUpEnvironment() internal virtual {
         // Un timestamp réaliste : le TWAP travaille sur des uint32.
         vm.warp(1_800_000_000);
 
@@ -53,16 +61,13 @@ abstract contract RevealBase is Test {
         amm = IUniswapV2Factory(
             deployCode("UniswapV2Factory.sol:UniswapV2Factory", abi.encode(address(this)))
         );
-        launcher = new RevealLauncher(address(amm), address(weth), LIQUIDITY);
-
-        _launch(defaultRules());
     }
 
     function _launch(Rules memory rules) internal {
         vm.deal(creator, LIQUIDITY);
         vm.prank(creator);
         (address t, address p) =
-            launcher.launch{value: LIQUIDITY}("Reveal", "REVEAL", SUPPLY, rules);
+            launcher.launch{value: LIQUIDITY}("Reveal", "REVEAL", METADATA_URI, SUPPLY, rules);
         token = RevealToken(t);
         pair = IUniswapV2Pair(p);
         tokenFirst = token.tokenIsToken0();

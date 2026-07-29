@@ -14,6 +14,10 @@ remappings = [
     "v2-core/=lib/v2-core/contracts/",
 ]
 
+[rpc_endpoints]
+robinhood = "https://rpc.mainnet.chain.robinhood.com"
+robinhood_testnet = "https://rpc.testnet.chain.robinhood.com"
+
 [fmt]
 line_length = 100
 tab_width = 4
