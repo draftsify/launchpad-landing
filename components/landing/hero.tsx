@@ -46,9 +46,9 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.16, ease: EASE }}
             className="mt-6 max-w-xl text-base leading-relaxed text-balance text-muted sm:text-lg"
           >
-            Un protocole qui rend les marchés plus efficaces, plus équitables et
-            plus durables. Les règles sont transparentes, connues à l&apos;avance,
-            et une sortie raisonnable reste toujours possible.
+            Reveal est un protocole qui rend les marchés plus efficaces, plus
+            équitables et plus durables. Les règles sont transparentes, connues à
+            l&apos;avance, et une sortie raisonnable reste toujours possible.
           </motion.p>
 
           <motion.div

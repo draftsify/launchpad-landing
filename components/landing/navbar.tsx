@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
@@ -37,14 +38,17 @@ export function Navbar() {
         aria-label="Navigation principale"
       >
         <Link href="/" className="flex items-center gap-2.5">
-          <span
-            className="flex size-7 items-center justify-center rounded-lg bg-accent text-[13px] font-bold text-[#06120e]"
+          <Image
+            src="/logo.png"
+            alt=""
+            width={512}
+            height={287}
+            priority
+            className="h-[18px] w-auto"
             aria-hidden
-          >
-            L
-          </span>
+          />
           <span className="text-[15px] font-semibold tracking-tight">
-            Launchpad
+            Reveal
           </span>
         </Link>
 

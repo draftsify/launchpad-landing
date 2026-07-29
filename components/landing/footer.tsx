@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const LINKS = [
@@ -11,14 +12,16 @@ export function Footer() {
     <footer className="mt-auto border-t border-white/10">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-10 sm:flex-row sm:items-center sm:px-8">
         <Link href="/" className="flex items-center gap-2.5">
-          <span
-            className="flex size-7 items-center justify-center rounded-lg bg-accent text-[13px] font-bold text-[#06120e]"
+          <Image
+            src="/logo.png"
+            alt=""
+            width={512}
+            height={287}
+            className="h-[18px] w-auto"
             aria-hidden
-          >
-            L
-          </span>
+          />
           <span className="text-[15px] font-semibold tracking-tight">
-            Launchpad
+            Reveal
           </span>
         </Link>
 
@@ -38,7 +41,7 @@ export function Footer() {
         </nav>
 
         <p className="text-sm text-subtle sm:ml-6">
-          © {new Date().getFullYear()} Launchpad
+          © {new Date().getFullYear()} Reveal
         </p>
       </div>
     </footer>

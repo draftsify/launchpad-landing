@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Launchpad — Price Discovery Protocol",
+  title: "Reveal — Price Discovery Protocol",
   description:
     "Le premier launchpad optimisé pour la découverte du prix. Des marchés plus efficaces, plus équitables et plus durables, avec des règles connues à l'avance.",
 };
