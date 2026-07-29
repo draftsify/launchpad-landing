@@ -108,7 +108,7 @@ export function Header() {
           )}
         </WalletDialog>
         <Button asChild>
-          <Link href="#create">
+          <Link href="/create">
             Launch a token
             <ArrowUpRight className="transition-transform group-hover/button:translate-x-0.5 group-hover/button:-translate-y-px" />
           </Link>
@@ -145,7 +145,7 @@ export function Header() {
                 </Button>
               </WalletDialog>
               <Button asChild>
-                <Link href="#create" onClick={() => setOpen(false)}>
+                <Link href="/create" onClick={() => setOpen(false)}>
                   Launch a token
                   <ArrowUpRight />
                 </Link>

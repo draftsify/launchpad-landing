@@ -38,7 +38,7 @@ export default function LaunchpadPage() {
           </div>
 
           <Button asChild>
-            <Link href="/#create">
+            <Link href="/create">
               Launch a token
               <ArrowRight />
             </Link>
@@ -101,7 +101,7 @@ export default function LaunchpadPage() {
               </p>
             </div>
             <Button variant="card" asChild>
-              <Link href="/#create">
+              <Link href="/create">
                 Launch a token
                 <ArrowRight />
               </Link>

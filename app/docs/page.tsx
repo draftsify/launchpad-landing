@@ -109,7 +109,7 @@ const token = await createToken({
               </Prose>
               <div className="flex flex-wrap gap-3 pt-1">
                 <Button asChild size="sm">
-                  <Link href="/#create">
+                  <Link href="/create">
                     Launch a token
                     <ArrowRight />
                   </Link>

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const PRODUCT = [
   { title: "Explore launches", href: "/launchpad" },
   { title: "How it works", href: "/how-it-works" },
-  { title: "Launch a token", href: "/#create" },
+  { title: "Launch a token", href: "/create" },
   { title: "Docs", href: "/docs" },
   { title: "Analytics", href: "/analytics" },
 ];

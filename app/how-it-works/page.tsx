@@ -136,7 +136,7 @@ export default function HowItWorksPage() {
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button asChild>
-            <Link href="/#create">
+            <Link href="/create">
               Launch a token
               <ArrowRight />
             </Link>

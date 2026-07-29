@@ -56,7 +56,7 @@ export function Hero() {
               </Link>
             </Button>
             <Button size="lg" asChild>
-              <Link href="#create">
+              <Link href="/create">
                 Launch a token
                 <ArrowRight />
               </Link>
