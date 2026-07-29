@@ -1,4 +1,5 @@
 out/
 cache/
-broadcast/*/dry-run/
+# Les chemins sont broadcast/<script>/<chainId>/dry-run/ : deux niveaux.
+broadcast/**/dry-run/
 .env
