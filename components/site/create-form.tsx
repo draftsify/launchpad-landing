@@ -573,7 +573,7 @@ export function CreateForm() {
             </div>
             <p className="text-xs text-muted-foreground">
               Reaches 100% after {formatDuration(RULES.unlockHours)}. Capped at{" "}
-              {RULES.impactCap}% of the pool's ETH per {RULES.impactWindow} min.
+              {RULES.impactCap}% of the pool&apos;s ETH per {RULES.impactWindow} min.
             </p>
           </div>
 
