@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { activeChain, chainParams } from "@/lib/chain";
+
 /** Fournisseur EIP-1193 injecté par les extensions de wallet. */
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -17,6 +19,10 @@ declare global {
 
 type WalletContextValue = {
   account: string | null;
+  /** Chaîne du wallet. Null tant qu'aucun fournisseur n'a répondu. */
+  chainId: number | null;
+  onCorrectChain: boolean;
+  switchChain: () => Promise<boolean>;
   pending: string | null;
   error: string | null;
   open: boolean;
@@ -39,6 +45,7 @@ export function shortenAddress(address: string) {
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = React.useState<string | null>(null);
+  const [chainId, setChainId] = React.useState<number | null>(null);
   const [pending, setPending] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
@@ -59,15 +66,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {});
 
+    provider
+      .request({ method: "eth_chainId" })
+      .then((id) => {
+        if (!cancelled) setChainId(Number(id as string));
+      })
+      .catch(() => {});
+
     const onAccountsChanged = (...args: never[]) => {
       const list = args[0] as unknown as string[];
       setAccount(list?.[0] ?? null);
     };
+    // Changer de réseau depuis le wallet doit se voir sans rechargement.
+    const onChainChanged = (...args: never[]) => {
+      setChainId(Number(args[0] as unknown as string));
+    };
     provider.on?.("accountsChanged", onAccountsChanged);
+    provider.on?.("chainChanged", onChainChanged);
 
     return () => {
       cancelled = true;
       provider.removeListener?.("accountsChanged", onAccountsChanged);
+      provider.removeListener?.("chainChanged", onChainChanged);
     };
   }, []);
 
@@ -103,6 +123,42 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  /**
+   * Bascule le wallet sur la bonne chaîne. Le code 4902 signifie que le wallet
+   * ne la connaît pas : on la lui ajoute, ce qui est le cas normal pour une
+   * chaîne récente.
+   */
+  const switchChain = React.useCallback(async () => {
+    const provider = window.ethereum;
+    if (!provider) return false;
+
+    const hexId = `0x${activeChain.id.toString(16)}`;
+    try {
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: hexId }],
+      });
+      return true;
+    } catch (err) {
+      const code = (err as { code?: number })?.code;
+      if (code !== 4902) {
+        setError("Network switch rejected.");
+        return false;
+      }
+    }
+
+    try {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [chainParams()],
+      });
+      return true;
+    } catch {
+      setError(`Could not add ${activeChain.name} to your wallet.`);
+      return false;
+    }
+  }, []);
+
   // Aucun standard ne permet de révoquer l'autorisation côté extension :
   // on ne fait qu'oublier le compte localement.
   const disconnect = React.useCallback(() => {
@@ -112,8 +168,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = React.useMemo(
-    () => ({ account, pending, error, open, setOpen, connect, disconnect }),
-    [account, pending, error, open, connect, disconnect]
+    () => ({
+      account,
+      chainId,
+      onCorrectChain: chainId === activeChain.id,
+      switchChain,
+      pending,
+      error,
+      open,
+      setOpen,
+      connect,
+      disconnect,
+    }),
+    [account, chainId, switchChain, pending, error, open, connect, disconnect]
   );
 
   return (

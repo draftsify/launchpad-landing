@@ -9,7 +9,7 @@ import { CreateForm } from "@/components/site/create-form";
 export const metadata: Metadata = {
   title: "Launch a token — Reveal",
   description:
-    "Configure identity, liquidity and selling rules, then launch. Every parameter is immutable and public before the first buy.",
+    "Name it, add an image, launch. Supply, liquidity and the selling rules are the protocol's and identical for everyone; you pay gas.",
 };
 
 export default function CreatePage() {
@@ -23,9 +23,9 @@ export default function CreatePage() {
             <BlurWords text="Launch a token" delay={0.05} />
           </h1>
           <p className="text-sm text-muted-foreground sm:text-base">
-            Identity, liquidity, and the rules that govern selling. Everything
-            you set here is written on chain and readable by buyers before the
-            first block —{" "}
+            Name, image, links. Supply, liquidity and the selling rules are the
+            same for every launch — what you write here goes on chain and is
+            readable by buyers before the first block —{" "}
             <Link
               href="/how-it-works"
               className="text-foreground underline-offset-4 hover:underline"

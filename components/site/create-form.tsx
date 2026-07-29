@@ -16,6 +16,15 @@ import { motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/x-icon";
 import { WalletDialog } from "@/components/site/wallet-dialog";
+import {
+  activeChain,
+  explorerAddress,
+  explorerTx,
+  isDeployed,
+  LAUNCHER_ADDRESS,
+} from "@/lib/chain";
+import { launchCall, tokenFromReceipt, waitForLaunch } from "@/lib/launcher";
+import { byteLength, shrinkImage, toDataUri } from "@/lib/metadata";
 import { useWallet } from "@/components/site/wallet-provider";
 import {
   RULES,
@@ -117,7 +126,13 @@ function PrefixInput({
 /* --------------------------------- form ---------------------------------- */
 
 export function CreateForm() {
-  const { account } = useWallet();
+  const { account, onCorrectChain, switchChain } = useWallet();
+  const [status, setStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "working"; step: string }
+    | { kind: "done"; hash: string; token?: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
   const reduce = useReducedMotion();
 
   const [name, setName] = useState("");
@@ -140,13 +155,95 @@ export function CreateForm() {
     };
   }, []);
 
-  function pickImage(file: File | undefined) {
+  async function pickImage(file: File | undefined) {
     if (!file) return;
-    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-    const url = URL.createObjectURL(file);
-    objectUrl.current = url;
-    setImage(url);
+    try {
+      // Compressée dès la sélection : ce qui est prévisualisé est exactement
+      // ce qui sera écrit dans le contrat, taille comprise.
+      const thumbnail = await shrinkImage(file);
+      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+      objectUrl.current = null;
+      setImage(thumbnail);
+      setStatus({ kind: "idle" });
+    } catch (err) {
+      setStatus({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Could not read that image",
+      });
+    }
   }
+
+  async function deploy() {
+    const provider = window.ethereum;
+    if (!provider || !account) return;
+
+    try {
+      if (!onCorrectChain && !(await switchChain())) return;
+
+      setStatus({ kind: "working", step: "Waiting for your signature" });
+      const metadataURI = toDataUri({
+        name: name.trim(),
+        symbol: ticker.trim(),
+        description,
+        image: image ?? undefined,
+        website,
+        x,
+        telegram,
+        discord,
+      });
+
+      const { encodeFunctionData } = await import("viem");
+      const call = launchCall(name.trim(), ticker.trim(), metadataURI);
+      const hash = (await provider.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: account,
+            to: LAUNCHER_ADDRESS,
+            data: encodeFunctionData({
+              abi: call.abi,
+              functionName: call.functionName,
+              args: [...call.args],
+            }),
+          },
+        ],
+      })) as `0x${string}`;
+
+      setStatus({ kind: "working", step: "Deploying — waiting for the block" });
+      const receipt = await waitForLaunch(hash);
+      if (receipt.status !== "success") {
+        setStatus({ kind: "error", message: "The transaction reverted." });
+        return;
+      }
+
+      setStatus({
+        kind: "done",
+        hash,
+        token: tokenFromReceipt(receipt)?.token,
+      });
+    } catch (err) {
+      const message =
+        (err as { shortMessage?: string })?.shortMessage ??
+        (err as Error)?.message ??
+        "Something went wrong";
+      setStatus({ kind: "error", message: message.slice(0, 160) });
+    }
+  }
+
+  const working = status.kind === "working";
+  const canSubmit = name.trim().length > 0 && ticker.trim().length > 0;
+  const metadataBytes = byteLength(
+    toDataUri({
+      name: name.trim(),
+      symbol: ticker.trim(),
+      description,
+      image: image ?? undefined,
+      website,
+      x,
+      telegram,
+      discord,
+    })
+  );
 
   const displayName = name.trim() || "Your token";
   const displayTicker = ticker.trim() || "TICKER";
@@ -359,23 +456,61 @@ export function CreateForm() {
           {/* Action principale en tête du panneau : elle reste atteignable
               sans avoir à parcourir le récapitulatif. */}
           <div className="space-y-2">
-            {account ? (
-              <Button className="w-full" disabled>
-                Launch token
-              </Button>
-            ) : (
+            {!account ? (
               <WalletDialog>
                 <Button className="w-full">
                   <Wallet />
                   Connect wallet to launch
                 </Button>
               </WalletDialog>
+            ) : (
+              <Button
+                className="w-full"
+                onClick={deploy}
+                disabled={!isDeployed || !canSubmit || working}
+              >
+                {working ? status.step : !onCorrectChain ? `Switch to ${activeChain.name}` : "Launch token"}
+              </Button>
             )}
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Info aria-hidden className="mt-0.5 size-3 shrink-0" />
-              Deployment goes live with the contracts. Nothing on this page is
-              submitted anywhere yet.
-            </p>
+
+            {status.kind === "done" ? (
+              <div className="space-y-1.5 rounded-xl border bg-muted/30 p-3">
+                <p className="text-xs font-medium">Launched.</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  {status.token && explorerAddress(status.token) && (
+                    <a
+                      href={explorerAddress(status.token)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Token contract
+                    </a>
+                  )}
+                  {explorerTx(status.hash) && (
+                    <a
+                      href={explorerTx(status.hash)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Transaction
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : status.kind === "error" ? (
+              <p role="alert" className="text-xs text-foreground">
+                {status.message}
+              </p>
+            ) : (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Info aria-hidden className="mt-0.5 size-3 shrink-0" />
+                {!isDeployed
+                  ? "No launcher deployed yet — set NEXT_PUBLIC_LAUNCHER once it is."
+                  : `Metadata is written into the contract itself (${metadataBytes} bytes). You pay gas.`}
+              </p>
+            )}
           </div>
 
           <p className="border-t pt-4 text-[11px] tracking-wide text-muted-foreground uppercase">
@@ -438,7 +573,7 @@ export function CreateForm() {
             </div>
             <p className="text-xs text-muted-foreground">
               Reaches 100% after {formatDuration(RULES.unlockHours)}. Capped at{" "}
-              {RULES.impactCap}% of liquidity per {RULES.impactWindow} min.
+              {RULES.impactCap}% of the pool's ETH per {RULES.impactWindow} min.
             </p>
           </div>
 
