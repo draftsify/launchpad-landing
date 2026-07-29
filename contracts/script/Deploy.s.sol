@@ -67,15 +67,30 @@ contract Deploy is Script, StdCheats {
         address factory = vm.envOr("AMM_FACTORY", address(0));
         address weth = vm.envOr("WETH", address(0));
 
-        if (block.chainid == ROBINHOOD_MAINNET) {
+        bool mainnet = block.chainid == ROBINHOOD_MAINNET;
+        if (mainnet) {
             if (factory == address(0)) factory = RH_V3_FACTORY;
             if (weth == address(0)) weth = RH_WETH;
+            // En mainnet on ne devine jamais : un WETH faux passerait le
+            // déploiement et casserait chaque lancement.
+            if (factory == address(0) || weth == address(0)) {
+                revert UnknownChain(block.chainid);
+            }
         }
-        // Un WETH ou une factory faux passeraient le déploiement et casseraient
-        // chaque lancement : on s'arrête ici plutôt que là.
-        if (factory == address(0) || weth == address(0)) revert UnknownChain(block.chainid);
 
         vm.startBroadcast();
+
+        // Ailleurs qu'en mainnet, on pose ce qui manque. Le testnet de
+        // Robinhood Chain n'a ni Uniswap ni WETH aux adresses du mainnet :
+        // vérifié, ces adresses n'y portent aucun code.
+        if (!mainnet && factory == address(0)) {
+            factory = deployCode("UniswapV3Factory.sol:UniswapV3Factory");
+            console.log("UniswapV3Factory deployed", factory);
+        }
+        if (!mainnet && weth == address(0)) {
+            weth = deployCode("WETH9.sol:WETH9");
+            console.log("WETH9 deployed          ", weth);
+        }
 
         // TickMath ne compile pas en 0.8 : la version canonique est déployée
         // puis interrogée, plutôt que retranscrite à la main.

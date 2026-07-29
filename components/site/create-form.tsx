@@ -126,7 +126,7 @@ function PrefixInput({
 /* --------------------------------- form ---------------------------------- */
 
 export function CreateForm() {
-  const { account, onCorrectChain, switchChain } = useWallet();
+  const { account, chainId, onCorrectChain, switchChain } = useWallet();
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "working"; step: string }
@@ -232,6 +232,14 @@ export function CreateForm() {
 
   const working = status.kind === "working";
   const canSubmit = name.trim().length > 0 && ticker.trim().length > 0;
+  // Le libellé et l'état désactivé doivent découler de la même condition :
+  // proposer « changer de réseau » sur un bouton grisé n'a aucun sens.
+  const needsChain = isDeployed && chainId !== null && !onCorrectChain;
+  const ctaLabel = working
+    ? status.step
+    : needsChain
+      ? `Switch to ${activeChain.name}`
+      : "Launch token";
   const metadataBytes = byteLength(
     toDataUri({
       name: name.trim(),
@@ -467,9 +475,9 @@ export function CreateForm() {
               <Button
                 className="w-full"
                 onClick={deploy}
-                disabled={!isDeployed || !canSubmit || working}
+                disabled={working || !isDeployed || (!needsChain && !canSubmit)}
               >
-                {working ? status.step : !onCorrectChain ? `Switch to ${activeChain.name}` : "Launch token"}
+                {ctaLabel}
               </Button>
             )}
 
@@ -507,7 +515,7 @@ export function CreateForm() {
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                 <Info aria-hidden className="mt-0.5 size-3 shrink-0" />
                 {!isDeployed
-                  ? "No launcher deployed yet — set NEXT_PUBLIC_LAUNCHER once it is."
+                  ? `Launching is off: no RevealLauncher is deployed on ${activeChain.name} yet. Deploy the contracts, then set NEXT_PUBLIC_LAUNCHER.`
                   : `Metadata is written into the contract itself (${metadataBytes} bytes). You pay gas.`}
               </p>
             )}
