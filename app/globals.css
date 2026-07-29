@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Fournit les utilitaires animate-in / fade-in / zoom-in utilisés par le dialog. */
+@import "tw-animate-css";
 
 @theme {
   --color-background: #0a0a0a;

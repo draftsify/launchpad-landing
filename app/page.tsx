@@ -1,6 +1,7 @@
 import { Header } from "@/components/site/header";
 import { Hero } from "@/components/site/hero";
 import { ProtocolMarquee } from "@/components/site/protocol-marquee";
+import { WalletConnect } from "@/components/site/wallet-connect";
 import { FrameShimmer } from "@/components/site/frame-shimmer";
 import { Footer } from "@/components/site/footer";
 
@@ -15,6 +16,7 @@ export default function Home() {
         <FrameShimmer />
         <Hero />
         <ProtocolMarquee />
+        <WalletConnect />
       </main>
 
       <Footer />

@@ -17,7 +17,7 @@
  *
  * Usage: node scripts/logos.mjs
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import * as si from "simple-icons";
@@ -128,6 +128,68 @@ await emit("uniswap", await fetchText(UNISWAP_URL));
   svg = svg.replace(/\sclass="[^"]*"/g, "");
   svg = svg.replace(/<path/g, `<path fill="${COLOR}"`);
   await emit("solflare", svg);
+}
+
+// --- Wallets EVM ------------------------------------------------------------
+// @web3icons/core fournit un jeu « mono » déjà blanc sur fond transparent.
+// MetaMask n'y figure qu'en version colorée : plutôt que de l'aplatir en
+// silhouette (le renard deviendrait une tache), on convertit ses teintes en
+// niveaux de gris par luminance, ce qui conserve ses facettes.
+const WEB3ICONS = "@web3icons/core/dist/svgs/wallets";
+
+const MONO_WALLETS = [
+  "rainbow",
+  "wallet-connect",
+  "ledger",
+  "trust",
+  "rabby",
+  "zerion",
+  "safe",
+  "argent",
+  "phantom",
+];
+
+/** Luminance perçue, remappée dans une plage claire pour rester lisible sur fond noir. */
+function toGrey(hex) {
+  const h = hex.replace("#", "");
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const level = Math.round((0.55 + lum * 0.45) * 255);
+  return `rgb(${level},${level},${level})`;
+}
+
+/**
+ * Le champ "exports" du paquet interdit les imports profonds : on lit le
+ * fichier et on en extrait la chaîne SVG, ce qui évite aussi de dépendre du
+ * format de module.
+ */
+async function loadWalletIcon(variant, name) {
+  const file = path.join(process.cwd(), "node_modules", WEB3ICONS, variant, `${name}.svg.js`);
+  const src = await readFile(file, "utf8");
+  // La chaîne se termine par des \n échappés avant le guillemet fermant.
+  const match = src.match(/'(<svg[\s\S]*?<\/svg>)(?:\\n)*'/);
+  if (!match) throw new Error(`icône illisible: ${variant}/${name}`);
+  return match[1]
+    .replace(/\\n/g, "\n")
+    .replace(/\\'/g, "'")
+    .replace(/\sclass="web3icons"/g, "");
+}
+
+for (const name of MONO_WALLETS) {
+  await emit(`wallet-${name}`, await loadWalletIcon("mono", name));
+}
+
+{
+  let svg = await loadWalletIcon("branded", "metamask");
+  svg = svg.replace(/fill="(#[0-9A-Fa-f]{3,6})"/g, (_, hex) => `fill="${toGrey(hex)}"`);
+  await emit("wallet-metamask", svg);
 }
 
 // Le ratio de chaque marque est propre à son recadrage : on le fige dans un
