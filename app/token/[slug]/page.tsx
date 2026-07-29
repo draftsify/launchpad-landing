@@ -155,10 +155,7 @@ export default async function TokenPage({
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,340px)]">
-          <MarketCapChart
-            points={token.series}
-            launchValue={token.launchMarketCap}
-          />
+          <MarketCapChart source={token.chart} />
           <TokenPosition ticker={token.ticker} rules={token.rules} />
         </div>
 

@@ -1,3 +1,5 @@
+import { formatUsd } from "@/lib/format";
+
 export type SeriesPoint = { t: string; value: number };
 
 export type TokenRules = {
@@ -29,43 +31,105 @@ export type Token = {
   supply: string;
   links: { website?: string; x?: string; telegram?: string };
   rules: TokenRules;
-  /** Capitalisation depuis le lancement, pas régulier. */
-  series: SeriesPoint[];
-  /** Repère du graphe : la capitalisation au premier bloc. */
-  launchMarketCap: number;
+  /** Source du graphe : la série est dépliée à l'affichage. */
+  chart: ChartSource;
 };
 
 /**
- * Étend une suite de valeurs sur un pas régulier. Évite d'écrire quarante
- * horodatages à la main, et garantit qu'ils restent alignés sur l'âge affiché.
+ * Description compacte d'une courbe. On ne transporte pas mille points dans
+ * la charge de page : seuls les jalons voyagent, la série fine est reconstruite
+ * à l'affichage — c'est elle qui permet une fenêtre d'une heure.
  */
-function series(startISO: string, stepMinutes: number, values: number[]): SeriesPoint[] {
-  const start = new Date(startISO).getTime();
-  return values.map((value, i) => ({
-    t: new Date(start + i * stepMinutes * 60_000).toISOString(),
-    value: value * 1_000,
-  }));
+export type ChartSource = {
+  /** Premier point, ISO UTC. */
+  start: string;
+  /** Minutes entre deux points de la série fine. */
+  stepMinutes: number;
+  /** Points générés entre deux jalons. */
+  perControl: number;
+  /** Jalons, en milliers de dollars. */
+  controls: number[];
+};
+
+/** Générateur déterministe : la courbe doit être identique à chaque rendu. */
+function mulberry32(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-// Lancement Jul 25 20:00 UTC, un point toutes les 2 h : 43 pas = 3 j 14 h,
-// ce que la fiche annonce comme âge. Le point à −24 h vaut 840K, ce qui
-// redonne exactement la variation de +42,8 % affichée ailleurs.
-const REVEAL_SERIES = series("2026-07-25T20:00:00Z", 120, [
-  340, 368, 352, 401, 389, 432, 470, 452, 498, 540, 521, 575, 612, 594, 648,
-  690, 668, 715, 762, 740, 690, 728, 775, 812, 786, 758, 802, 830, 795, 768,
-  812, 840, 902, 875, 948, 1010, 1085, 1152, 1218, 1190, 1265, 1310, 1248,
-  1200,
-]);
+const NOISE_SEED = 0x5eaf;
 
-// Données mock : aucun indexeur n'est branché à ce stade.
+export function buildSeries(source: ChartSource): SeriesPoint[] {
+  const { start, stepMinutes, perControl, controls } = source;
+  const rand = mulberry32(NOISE_SEED);
+  const t0 = new Date(start).getTime();
+  const last = (controls.length - 1) * perControl;
+
+  const out: SeriesPoint[] = [];
+  let noise = 0;
+
+  for (let i = 0; i <= last; i++) {
+    const seg = Math.min(Math.floor(i / perControl), controls.length - 2);
+    const f = (i - seg * perControl) / perControl;
+    const base = controls[seg] + (controls[seg + 1] - controls[seg]) * f;
+
+    // Marche amortie plutôt que bruit blanc : les écarts persistent un peu,
+    // ce qui donne des paliers au lieu d'un tremblement régulier. Le bruit
+    // court sur toute la série, y compris la dernière heure — c'est la
+    // fenêtre la plus regardée, elle ne doit pas être la plus lisse.
+    noise = noise * 0.93 + (rand() - 0.5) * base * 0.012;
+
+    out.push({
+      t: new Date(t0 + i * stepMinutes * 60_000).toISOString(),
+      value: Math.round((base + noise) * 1_000),
+    });
+  }
+
+  return out;
+}
+
+// Lancement Jul 25 20:00 UTC, jalons toutes les 2 h : 43 pas = 3 j 14 h,
+// soit l'âge affiché sur la fiche.
+const REVEAL_CHART: ChartSource = {
+  start: "2026-07-25T20:00:00Z",
+  stepMinutes: 5,
+  perControl: 24,
+  controls: [
+    340, 368, 352, 401, 389, 432, 470, 452, 498, 540, 521, 575, 612, 594, 648,
+    690, 668, 715, 762, 740, 690, 728, 775, 812, 786, 758, 802, 830, 795, 768,
+    812, 840, 902, 875, 948, 1010, 1085, 1152, 1218, 1190, 1265, 1310, 1248,
+    1200,
+  ],
+};
+
+const REVEAL_SERIES = buildSeries(REVEAL_CHART);
+
+function latest(series: SeriesPoint[]) {
+  return series[series.length - 1].value;
+}
+
+/** Variation sur une fenêtre, lue dans la série et non saisie à la main. */
+function changeOver(series: SeriesPoint[], hours: number, stepMinutes: number) {
+  const back = (hours * 60) / stepMinutes;
+  const then = series[Math.max(0, series.length - 1 - back)].value;
+  return ((latest(series) - then) / then) * 100;
+}
+
+// Données mock : aucun indexeur n'est branché à ce stade. Les chiffres de
+// capitalisation sont lus dans la courbe plutôt que recopiés : c'est la seule
+// façon qu'ils ne dérivent pas de ce que le graphe montre.
 export const TOKENS: Token[] = [
   {
     slug: "reveal",
     name: "Reveal",
     ticker: "REVEAL",
-    marketCap: "$1.2M",
-    marketCapValue: 1_200_000,
-    change: 42.8,
+    marketCap: formatUsd(latest(REVEAL_SERIES)),
+    marketCapValue: latest(REVEAL_SERIES),
+    change: changeOver(REVEAL_SERIES, 24, REVEAL_CHART.stepMinutes),
     address: "0x7A3F9c21E4b8D5a06fC1e7B2d93aC48e5F0b1d62",
     age: "3d 14h",
     holders: "1,284",
@@ -84,8 +148,7 @@ export const TOKENS: Token[] = [
       impactWindow: 5,
       launchDelay: 30,
     },
-    series: REVEAL_SERIES,
-    launchMarketCap: 340_000,
+    chart: REVEAL_CHART,
   },
 ];
 
