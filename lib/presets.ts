@@ -1,3 +1,10 @@
+/**
+ * Liquidité appariée au déploiement. Identique pour tout lancement : c'est
+ * l'échelle contre laquelle chaque plafond d'impact est mesuré, la laisser
+ * varier rendrait les plafonds incomparables d'un token à l'autre.
+ */
+export const LAUNCH_LIQUIDITY_ETH = 4;
+
 export type Rules = {
   /** Part vendable dès le premier bloc, en %. */
   initialUnlock: number;

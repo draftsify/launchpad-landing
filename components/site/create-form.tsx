@@ -17,7 +17,12 @@ import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/x-icon";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
-import { PRESETS, formatDuration, type Rules } from "@/lib/presets";
+import {
+  LAUNCH_LIQUIDITY_ETH,
+  PRESETS,
+  formatDuration,
+  type Rules,
+} from "@/lib/presets";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -126,7 +131,6 @@ export function CreateForm() {
   const [telegram, setTelegram] = useState("");
   const [discord, setDiscord] = useState("");
   const [supply, setSupply] = useState("1000000000");
-  const [liquidity, setLiquidity] = useState("4");
   const [presetId, setPresetId] = useState(PRESETS[0].id);
   const [rules, setRules] = useState<Rules>(PRESETS[0].rules);
   const [advanced, setAdvanced] = useState(false);
@@ -336,11 +340,7 @@ export function CreateForm() {
           </div>
         </Section>
 
-        <Section
-          step="03"
-          title="Supply and liquidity"
-          hint="Liquidity is paired at deployment and sets the scale every impact cap is measured against."
-        >
+        <Section step="03" title="Supply">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Total supply" htmlFor="token-supply">
               <input
@@ -353,22 +353,27 @@ export function CreateForm() {
                 className={cn(inputClass, "font-mono tabular-nums")}
               />
             </Field>
-            <Field
-              label="Initial liquidity"
-              htmlFor="token-liquidity"
-              hint="Deeper liquidity raises the cost of manipulating the price oracle."
-            >
-              <PrefixInput
-                id="token-liquidity"
-                icon={null}
-                prefix="ETH"
-                value={liquidity}
-                onChange={(e) =>
-                  setLiquidity(e.target.value.replace(/[^0-9.]/g, ""))
-                }
-                inputMode="decimal"
-              />
-            </Field>
+
+            {/* Non modifiable, mais affiché : c'est l'échelle contre laquelle
+                le plafond d'impact est mesuré, et un coût pour le créateur. */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Initial liquidity</p>
+              <div className="flex h-10 items-center gap-2 rounded-xl border border-dashed bg-muted/30 px-3">
+                <span className="font-mono text-xs text-muted-foreground">
+                  ETH
+                </span>
+                <span className="font-mono text-sm tabular-nums">
+                  {LAUNCH_LIQUIDITY_ETH}
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Fixed
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Identical for every launch, so impact caps mean the same thing
+                across tokens.
+              </p>
+            </div>
           </div>
         </Section>
 
@@ -611,7 +616,7 @@ export function CreateForm() {
             {[
               ["Preset", activePreset?.label ?? "Custom"],
               ["Supply", supply ? Number(supply).toLocaleString("en-US") : "—"],
-              ["Liquidity", liquidity ? `${liquidity} ETH` : "—"],
+              ["Liquidity", `${LAUNCH_LIQUIDITY_ETH} ETH`],
               ["First buy opens", `${rules.launchDelay}s after deploy`],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
