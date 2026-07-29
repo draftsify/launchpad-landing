@@ -1,7 +1,9 @@
 /**
- * Liquidité appariée au déploiement. Identique pour tout lancement : c'est
- * l'échelle contre laquelle chaque plafond d'impact est mesuré, la laisser
- * varier rendrait les plafonds incomparables d'un token à l'autre.
+ * Liquidité appariée au déploiement, fournie par la trésorerie du protocole :
+ * le créateur ne paie que le gas. Identique pour tout lancement, parce que
+ * c'est l'échelle contre laquelle chaque plafond d'impact est mesuré — la
+ * laisser varier rendrait « 1 % de la liquidité » incomparable d'un token à
+ * l'autre.
  */
 export const LAUNCH_LIQUIDITY_ETH = 4;
 

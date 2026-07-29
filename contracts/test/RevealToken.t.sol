@@ -311,30 +311,110 @@ contract RevealTokenTest is RevealBase {
 
     // ------------------------------------------------------------- validation
 
-    function test_LaunchRejectsWrongLiquidity() public {
-        vm.deal(creator, 10 ether);
+    function test_LaunchCostsTheCreatorNothingButGas() public {
+        uint256 before = creator.balance;
+        uint256 treasuryBefore = launcher.treasury();
+
         vm.prank(creator);
-        vm.expectRevert(
-            abi.encodeWithSelector(RevealLauncher.WrongLiquidity.selector, LIQUIDITY)
+        launcher.launch("Second", "SCND", "", SUPPLY, defaultRules());
+
+        assertEq(creator.balance, before, "aucune valeur prelevee au createur");
+        assertEq(
+            launcher.treasury(), treasuryBefore - LIQUIDITY, "la tresorerie a paye"
         );
-        launcher.launch{value: 1 ether}("X", "X", "", SUPPLY, defaultRules());
     }
 
     function test_LaunchRejectsImpossibleRules() public {
         Rules memory r = defaultRules();
         r.impactCapBps = 0;
 
-        vm.deal(creator, LIQUIDITY);
         vm.prank(creator);
         vm.expectRevert(RevealRules.ImpactCapOutOfRange.selector);
-        launcher.launch{value: LIQUIDITY}("X", "X", "", SUPPLY, r);
+        launcher.launch("X", "X", "", SUPPLY, r);
     }
 
     function test_LaunchRejectsSupplyAboveTheCastBound() public {
-        vm.deal(creator, LIQUIDITY);
         vm.prank(creator);
         vm.expectRevert(RevealLauncher.SupplyOutOfRange.selector);
-        launcher.launch{value: LIQUIDITY}("X", "X", "", 1e37, defaultRules());
+        launcher.launch("X", "X", "", 1e37, defaultRules());
+    }
+
+    // ------------------------------------------------------------ tresorerie
+
+    /**
+     * Le budget borne ce qu'un spammeur peut immobiliser. Il ne l'empeche pas
+     * de consommer la fenetre du jour : c'est une limite de degats, pas une
+     * prevention. Un frais de lancement serait le second levier.
+     */
+    function test_TreasuryBudgetCapsLaunchesPerWindow() public {
+        uint256 already = 1; // le lancement du setUp
+        uint256 perWindow = BUDGET / LIQUIDITY;
+
+        for (uint256 i = already; i < perWindow; i++) {
+            vm.prank(creator);
+            launcher.launch("Spam", "SPAM", "", SUPPLY, defaultRules());
+        }
+
+        assertEq(launcher.budgetRemaining(), 0, "fenetre consommee");
+        assertFalse(launcher.canLaunch(), "l'interface peut le voir avant de signer");
+
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(RevealLauncher.BudgetExhausted.selector, 0));
+        launcher.launch("Spam", "SPAM", "", SUPPLY, defaultRules());
+    }
+
+    function test_TreasuryBudgetRefillsAcrossTheWindow() public {
+        uint256 perWindow = BUDGET / LIQUIDITY;
+        for (uint256 i = 1; i < perWindow; i++) {
+            vm.prank(creator);
+            launcher.launch("Spam", "SPAM", "", SUPPLY, defaultRules());
+        }
+        assertEq(launcher.budgetRemaining(), 0);
+
+        vm.warp(block.timestamp + 12 hours);
+        assertApproxEqRel(launcher.budgetRemaining(), BUDGET / 2, 0.02e18);
+        assertTrue(launcher.canLaunch());
+
+        vm.warp(block.timestamp + 12 hours + 1);
+        assertEq(launcher.budgetRemaining(), BUDGET, "fenetre entierement revenue");
+    }
+
+    function test_LaunchRevertsWhenTreasuryCannotCover() public {
+        // Un launcher tout neuf, sans un wei.
+        RevealLauncher empty = new RevealLauncher(
+            address(amm), address(weth), LIQUIDITY, BUDGET, BUDGET_WINDOW
+        );
+
+        vm.prank(creator);
+        vm.expectRevert(
+            abi.encodeWithSelector(RevealLauncher.TreasuryEmpty.selector, 0, LIQUIDITY)
+        );
+        empty.launch("X", "X", "", SUPPLY, defaultRules());
+    }
+
+    /// Aucune clé d'administration sur les fonds : ils ne sortent que vers un pool.
+    function test_TreasuryHasNoWithdrawal() public {
+        uint256 held = launcher.treasury();
+        assertGt(held, 0);
+
+        // Aucune fonction de retrait n'existe : un appel arbitraire ne trouve
+        // aucun selecteur, et le fallback payable ne fait qu'ajouter des fonds.
+        (bool ok,) = address(launcher).call(
+            abi.encodeWithSignature("withdraw(uint256)", held)
+        );
+        assertFalse(ok, "pas de retrait");
+        assertEq(launcher.treasury(), held);
+    }
+
+    function test_AnyoneCanFundTheTreasury() public {
+        uint256 before = launcher.treasury();
+        vm.deal(bob, 1 ether);
+
+        vm.prank(bob);
+        (bool ok,) = address(launcher).call{value: 1 ether}("");
+
+        assertTrue(ok);
+        assertEq(launcher.treasury(), before + 1 ether);
     }
 
     // ------------------------------------------------------------------ fuzz

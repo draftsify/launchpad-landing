@@ -354,8 +354,9 @@ export function CreateForm() {
               />
             </Field>
 
-            {/* Non modifiable, mais affiché : c'est l'échelle contre laquelle
-                le plafond d'impact est mesuré, et un coût pour le créateur. */}
+            {/* Affiché sans être modifiable : le créateur ne le paie pas, mais
+                c'est l'échelle contre laquelle son plafond d'impact se mesure —
+                « 1 % de la liquidité » n'a de sens qu'avec ce référent. */}
             <div className="space-y-1.5">
               <p className="text-sm font-medium">Initial liquidity</p>
               <div className="flex h-10 items-center gap-2 rounded-xl border border-dashed bg-muted/30 px-3">
@@ -366,12 +367,12 @@ export function CreateForm() {
                   {LAUNCH_LIQUIDITY_ETH}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground">
-                  Fixed
+                  Provided by Reveal
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Identical for every launch, so impact caps mean the same thing
-                across tokens.
+                The protocol seeds the pool and burns the LP tokens, so nobody
+                can pull the liquidity out. You pay gas only.
               </p>
             </div>
           </div>
@@ -616,7 +617,8 @@ export function CreateForm() {
             {[
               ["Preset", activePreset?.label ?? "Custom"],
               ["Supply", supply ? Number(supply).toLocaleString("en-US") : "—"],
-              ["Liquidity", `${LAUNCH_LIQUIDITY_ETH} ETH`],
+              ["Liquidity", `${LAUNCH_LIQUIDITY_ETH} ETH — seeded`],
+              ["Your cost", "Gas only"],
               ["First buy opens", `${rules.launchDelay}s after deploy`],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">

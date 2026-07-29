@@ -377,9 +377,9 @@ uint256 drawdown  = entryPrice > reference
               <DefList
                 items={[
                   {
-                    term: "Launch fee",
+                    term: "Launch cost",
                     description:
-                      "A flat fee at deployment, paid by the creator. It does not scale with supply or liquidity.",
+                      "Gas only. The protocol treasury seeds the pool and the LP tokens are burned, so the liquidity is neither the creator's to fund nor anyone's to withdraw.",
                   },
                   {
                     term: "Trade fee",

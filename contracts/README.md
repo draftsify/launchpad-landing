@@ -8,6 +8,26 @@ launch and there is no function that can change one afterwards.
 RevealLauncher.launch()  →  RevealToken  +  Uniswap V2 pair  (LP burned)
 ```
 
+## Who pays for the pool
+
+The launcher's own treasury does. A creator pays gas and nothing else.
+
+Uniswap never supplies capital — a pair is created empty and its price is set by
+whoever first deposits both sides. Here that is `RevealLauncher`, funded by
+anyone who sends it ETH. **There is no withdrawal function**: the treasury's only
+exit is into a pool whose LP tokens are burned, so no key controls the money.
+
+That makes the treasury **wastable, not stealable**. A launch puts the liquidity
+against the entire supply and burns the LP; the caller receives no tokens, and
+taking ETH out of the pool means putting ETH in first. The exposure is capital
+exhaustion, not theft — so the defence is a spend budget over a sliding window
+(`budgetPerWindow` / `budgetWindow`, the same leaky bucket as the impact cap)
+rather than a fee, which would contradict "gas only".
+
+This bounds the damage; it does not prevent a determined spammer from consuming
+a window. A small launch fee is the obvious second lever if that happens.
+`canLaunch()` exists so the interface can check before a creator spends gas.
+
 ## The three gates
 
 Every transfer passes through `RevealToken._update`, in this order.

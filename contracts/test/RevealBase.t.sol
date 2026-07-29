@@ -45,10 +45,24 @@ abstract contract RevealBase is Test {
         });
     }
 
+    /// Dix lancements par jour : borne les dégâts d'un spammeur sans gêner un
+    /// rythme réaliste.
+    uint256 internal constant BUDGET = 10 * LIQUIDITY;
+    uint32 internal constant BUDGET_WINDOW = 1 days;
+
     function setUp() public virtual {
         _setUpEnvironment();
-        launcher = new RevealLauncher(address(amm), address(weth), LIQUIDITY);
+        launcher = new RevealLauncher(
+            address(amm), address(weth), LIQUIDITY, BUDGET, BUDGET_WINDOW
+        );
+        _fundTreasury(BUDGET * 4);
         _launch(defaultRules());
+    }
+
+    function _fundTreasury(uint256 amount) internal {
+        vm.deal(address(this), amount);
+        (bool ok,) = address(launcher).call{value: amount}("");
+        assertTrue(ok, "tresorerie abondee");
     }
 
     /// Surchargé par le test de fork, qui branche le vrai Uniswap d'une chaîne.
@@ -63,11 +77,11 @@ abstract contract RevealBase is Test {
         );
     }
 
+    /// Le créateur ne paie que le gas : la liquidité vient de la trésorerie.
     function _launch(Rules memory rules) internal {
-        vm.deal(creator, LIQUIDITY);
         vm.prank(creator);
         (address t, address p) =
-            launcher.launch{value: LIQUIDITY}("Reveal", "REVEAL", METADATA_URI, SUPPLY, rules);
+            launcher.launch("Reveal", "REVEAL", METADATA_URI, SUPPLY, rules);
         token = RevealToken(t);
         pair = IUniswapV2Pair(p);
         tokenFirst = token.tokenIsToken0();
