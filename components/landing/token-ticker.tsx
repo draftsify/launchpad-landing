@@ -22,7 +22,7 @@ const TOKENS: Token[] = [
     marketCap: "$1.24M",
     change: 42.8,
     locked: 72,
-    gradient: "from-emerald-400 to-teal-600",
+    gradient: "from-white to-zinc-400",
   },
   {
     name: "Northwind",
@@ -30,7 +30,7 @@ const TOKENS: Token[] = [
     marketCap: "$860K",
     change: 12.4,
     locked: 55,
-    gradient: "from-cyan-400 to-blue-600",
+    gradient: "from-zinc-200 to-zinc-500",
   },
   {
     name: "Basalt",
@@ -38,7 +38,7 @@ const TOKENS: Token[] = [
     marketCap: "$2.07M",
     change: -6.2,
     locked: 38,
-    gradient: "from-violet-400 to-indigo-600",
+    gradient: "from-zinc-300 to-zinc-600",
   },
   {
     name: "Meridian",
@@ -46,7 +46,7 @@ const TOKENS: Token[] = [
     marketCap: "$418K",
     change: 88.1,
     locked: 91,
-    gradient: "from-amber-400 to-orange-600",
+    gradient: "from-white to-zinc-500",
   },
   {
     name: "Tidewater",
@@ -54,7 +54,7 @@ const TOKENS: Token[] = [
     marketCap: "$1.71M",
     change: -2.9,
     locked: 24,
-    gradient: "from-rose-400 to-pink-600",
+    gradient: "from-zinc-100 to-zinc-400",
   },
 ];
 
@@ -79,16 +79,21 @@ function TokenCard({ token }: { token: Token }) {
           </p>
           <p className="font-mono text-xs text-subtle">${token.ticker}</p>
         </div>
+        {/* En monochrome, la direction passe par la flèche et le contraste,
+            jamais par la seule couleur. */}
         <span
           className={cn(
-            "ml-auto rounded-md px-2 py-1 font-mono text-xs font-medium",
+            "ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-xs font-medium tabular-nums",
             positive
-              ? "bg-accent-soft text-accent"
-              : "bg-rose-500/10 text-rose-400"
+              ? "bg-white/12 text-foreground"
+              : "bg-white/[0.04] text-subtle"
           )}
         >
-          {positive ? "+" : ""}
-          {token.change.toFixed(1)}%
+          <span aria-hidden>{positive ? "↑" : "↓"}</span>
+          {Math.abs(token.change).toFixed(1)}%
+          <span className="sr-only">
+            {positive ? "en hausse" : "en baisse"} sur 24 heures
+          </span>
         </span>
       </div>
 

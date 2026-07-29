@@ -3,11 +3,11 @@
 @theme {
   --color-background: #0a0a0a;
   --color-foreground: #fafafa;
-  --color-muted: #a1a1aa;
-  --color-subtle: #71717a;
-  --color-surface: #101012;
-  --color-accent: #34d399;
-  --color-accent-soft: #0f2f26;
+  --color-muted: #a1a1a1;
+  --color-subtle: #6e6e6e;
+  --color-surface: #111111;
+  --color-accent: #fafafa;
+  --color-accent-foreground: #0a0a0a;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -27,8 +27,8 @@ body {
 }
 
 ::selection {
-  background: var(--color-accent);
-  color: #06120e;
+  background: var(--color-foreground);
+  color: var(--color-background);
 }
 
 /* Masque la scrollbar du bandeau de tokens, le scroll reste possible */
