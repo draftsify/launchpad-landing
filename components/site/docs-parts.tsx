@@ -29,7 +29,7 @@ export function Prose({ children }: { children: React.ReactNode }) {
 
 export function Code({ children }: { children: string }) {
   return (
-    <pre className="overflow-x-auto rounded-xl border bg-muted/30 p-4">
+    <pre className="scrollbar-slim overflow-x-auto rounded-xl border bg-muted/30 p-4">
       <code className="font-mono text-xs leading-relaxed text-foreground/90">
         {children}
       </code>
@@ -69,7 +69,7 @@ export function Callout({
 
 export function ParamTable({ params }: { params: Param[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border">
+    <div className="scrollbar-slim overflow-x-auto rounded-xl border">
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead className="border-b bg-muted/40">
           <tr>

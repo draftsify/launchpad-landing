@@ -107,7 +107,7 @@ export function WalletDialog({ children }: { children: React.ReactNode }) {
               </DialogDescription>
             </DialogHeader>
 
-            <ul className="-mx-1 max-h-[340px] space-y-1 overflow-y-auto px-1">
+            <ul className="scrollbar-slim -mx-1 max-h-[340px] space-y-1 overflow-y-auto px-1">
               {WALLETS.map((wallet) => (
                 <li key={wallet.slug}>
                   <button

@@ -43,6 +43,52 @@ body {
   color: var(--color-background);
 }
 
+/**
+ * Barre de défilement discrète, pour les zones scrollables internes.
+ *
+ * Les deux syntaxes cohabitent volontairement : `scrollbar-color` couvre
+ * Firefox et Chrome 121+, les règles ::-webkit-scrollbar couvrent Safari et
+ * les Chrome plus anciens. Un navigateur qui gère la propriété standard
+ * ignore les secondes, il n'y a donc pas de double application.
+ */
+.scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: #303030 transparent;
+  transition: scrollbar-color 0.2s ease;
+}
+
+.scrollbar-slim:hover,
+.scrollbar-slim:focus-within {
+  scrollbar-color: #4a4a4a transparent;
+}
+
+.scrollbar-slim::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background-color: #303030;
+  border-radius: 999px;
+}
+
+.scrollbar-slim:hover::-webkit-scrollbar-thumb {
+  background-color: #4a4a4a;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb:hover {
+  background-color: #5a5a5a;
+}
+
+/* Évite le carré vide à l'intersection des deux barres. */
+.scrollbar-slim::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 @keyframes marquee {
   from {
     transform: translateX(0);

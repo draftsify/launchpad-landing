@@ -38,7 +38,9 @@ export default function DocsPage() {
         <FullWidthDivider className="-top-px" />
 
         <div className="grid gap-10 lg:grid-cols-[minmax(0,236px)_1fr] lg:gap-12">
-          <aside className="lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:pb-8">
+          {/* overscroll-contain : arriver en bas de la sidebar ne doit pas
+              entraîner la page derrière elle. */}
+          <aside className="scrollbar-slim overscroll-contain lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:pr-2 lg:pb-8">
             <div className="mb-6 space-y-2">
               <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
                 <BlurWords text="Docs" delay={0.05} />
