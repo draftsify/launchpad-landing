@@ -3,16 +3,26 @@
 @theme {
   --color-background: #0a0a0a;
   --color-foreground: #fafafa;
-  --color-muted: #a1a1a1;
-  --color-subtle: #6e6e6e;
-  --color-surface: #111111;
-  --color-accent: #fafafa;
-  --color-accent-foreground: #0a0a0a;
+  --color-card: #101010;
+  --color-border: #232323;
+  --color-muted: #151515;
+  --color-muted-foreground: #8b8b8b;
+  --color-secondary: #131313;
+  --color-primary: #fafafa;
+  --color-primary-foreground: #0a0a0a;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
 
-  --radius: 12px;
+@layer base {
+  /* Tailwind v4 ne pose plus de couleur de bordure par défaut : sans ça,
+     toutes les classes `border*` tomberaient sur currentColor. */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-border);
+  }
 }
 
 html {
@@ -31,17 +41,28 @@ body {
   color: var(--color-background);
 }
 
-/* Masque la scrollbar du bandeau de tokens, le scroll reste possible */
-.no-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-50% - var(--marquee-gap, 0px) / 2));
+  }
 }
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+
+.animate-marquee {
+  animation: marquee var(--marquee-duration, 60s) linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  .animate-marquee {
+    animation: none;
   }
 }
