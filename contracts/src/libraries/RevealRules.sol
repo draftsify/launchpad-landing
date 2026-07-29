@@ -25,13 +25,14 @@ library RevealRules {
     uint16 internal constant BPS = 10_000;
 
     /**
-     * Pente du drawdown relief : un point de perte ouvre deux points de
-     * déblocage. À −50 %, une position est intégralement libérée.
+     * Nombre de ticks Uniswap qui séparent un prix de sa moitié :
+     * ln(0.5) / ln(1.0001). Un tick vaut un pas de 1,0001×.
      *
-     * Constante du protocole et non paramètre de lancement : c'est la garantie
-     * de sortie, laisser un créateur la régler reviendrait à la lui retirer.
+     * Le drawdown relief se mesure en ticks et non en pourcentage, parce que
+     * l'oracle de v3 rend un tick : convertir en prix exigerait de calculer
+     * 1,0001^n sur la chaîne, donc de retranscrire TickMath à la main.
      */
-    uint256 internal constant RELIEF_SLOPE_BPS = 2 * uint256(BPS);
+    uint256 internal constant HALVING_TICKS = 6_932;
 
     /// Taille d'achat autorisée au tout début de la rampe, en bps des réserves.
     uint256 internal constant RAMP_START_BPS = 25;
@@ -71,12 +72,15 @@ library RevealRules {
     }
 
     /**
-     * Plancher de déblocage ouvert par la perte latente. C'est un plancher et
-     * non un bonus : une position déjà libérée par le temps ne gagne rien, une
-     * position récente mais très en perte peut sortir malgré tout.
+     * Plancher de déblocage ouvert par la perte latente, mesurée en ticks sous
+     * le prix d'entrée. Un prix divisé par deux libère intégralement.
+     *
+     * C'est un plancher et non un bonus : une position déjà libérée par le
+     * temps ne gagne rien, une position récente mais très en perte peut sortir
+     * malgré tout.
      */
-    function reliefBps(uint256 drawdownBps) internal pure returns (uint256) {
-        uint256 relief = (drawdownBps * RELIEF_SLOPE_BPS) / BPS;
+    function reliefBps(uint256 tickDrop) internal pure returns (uint256) {
+        uint256 relief = (tickDrop * BPS) / HALVING_TICKS;
         return relief > BPS ? BPS : relief;
     }
 

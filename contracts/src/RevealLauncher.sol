@@ -1,137 +1,114 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IUniswapV2Factory, IUniswapV2Pair, IWETH} from "./interfaces/IUniswapV2.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import {
+    IUniswapV3Factory, IUniswapV3MintCallback, IUniswapV3Pool
+} from "./interfaces/IUniswapV3.sol";
 import {Rules, RevealRules} from "./libraries/RevealRules.sol";
 import {RevealToken} from "./RevealToken.sol";
 
 /**
- * Point d'entrée d'un lancement. Déploie le token, monte le pool Uniswap V2,
- * y verse toute la supply avec la liquidité, brûle les parts de LP, puis arme
- * les règles. Le créateur ne paie que le gas.
+ * Point d'entrée d'un lancement. Déploie le token, crée son pool Uniswap V3,
+ * y place la supply entière en liquidité **unilatérale**, verrouille la
+ * position, puis arme les règles.
  *
- * La liquidité vient de la trésorerie de ce contrat, que n'importe qui peut
- * abonder et que personne ne peut retirer : elle ne sort que vers un pool dont
- * les LP sont brûlées. Il n'y a donc aucune clé d'administration sur les fonds.
+ * Unilatéral veut dire : toute la supply est posée dans une plage de ticks
+ * située au-dessus du prix de départ, donc la position est à 100 % en tokens et
+ * à 0 % en quote. Personne n'avance de capital — ni le créateur, ni le
+ * protocole. Ce sont les achats qui constituent la liquidité, en poussant le
+ * prix à travers la plage. C'est ce que Uniswap V2 ne sait pas faire : il exige
+ * les deux côtés.
  *
- * Ce que ça expose, et qu'il faut nommer : la trésorerie est **gaspillable, pas
- * volable**. Un lancement met la liquidité face à la supply entière et brûle les
- * LP ; le lanceur ne reçoit aucun token, et extraire de l'ETH du pool suppose
- * d'en avoir injecté d'abord. Le risque est l'épuisement du capital, pas le vol.
- * D'où un budget par fenêtre glissante, qui borne les dégâts d'un spammeur sans
- * imposer de frais au créateur.
- *
- * La liquidité initiale est la même pour tous : c'est l'échelle contre laquelle
- * chaque plafond d'impact se mesure, la laisser varier rendrait « 1 % du pool »
- * incomparable d'un token à l'autre.
+ * La position est ouverte au nom de `BURN`. Dans v3 une position appartient à
+ * (owner, tickLower, tickUpper) : personne d'autre que cette adresse ne peut
+ * appeler `burn` ni `collect`, donc ni la liquidité ni les frais accumulés ne
+ * sortiront jamais.
  */
-contract RevealLauncher {
-    /// Les parts de LP y sont envoyées : personne ne peut retirer la liquidité.
+contract RevealLauncher is IUniswapV3MintCallback {
+    uint256 private constant Q96 = 1 << 96;
+    /// Propriétaire de la position : sans clé, donc sans retrait possible.
     address public constant BURN = 0x000000000000000000000000000000000000dEaD;
 
-    IUniswapV2Factory public immutable ammFactory;
-    IWETH public immutable weth;
-    uint256 public immutable launchLiquidity;
+    /**
+     * Plage de la position. Deux jeux sont nécessaires parce que l'ordre des
+     * tokens dans une paire dépend de leurs adresses, et que le prix s'inverse
+     * avec lui.
+     */
+    struct Range {
+        int24 tickLower;
+        int24 tickUpper;
+        uint160 sqrtLower;
+        uint160 sqrtUpper;
+    }
 
-    /// Plafond de dépense de la trésorerie sur une fenêtre glissante.
-    uint256 public immutable budgetPerWindow;
-    uint32 public immutable budgetWindow;
+    IUniswapV3Factory public immutable ammFactory;
+    address public immutable quote;
+    uint24 public immutable fee;
+    uint16 public immutable observationCardinality;
 
-    uint256 public spentInWindow;
-    uint64 public spentAt;
+    Range public rangeIfToken0;
+    Range public rangeIfToken1;
 
     address[] public tokens;
+    /// Renseigné le temps d'un `mint`, pour authentifier le rappel.
+    address private minting;
 
+    /**
+     * `name`, `symbol` et `metadataURI` ne sont pas répétés ici : ils se lisent
+     * sur le token, et les inclure saturait la pile du compilateur. Un indexeur
+     * les récupère par appel au moment où il traite l'événement.
+     */
     event Launched(
         address indexed token,
         address indexed creator,
-        address pair,
-        string name,
-        string symbol,
-        string metadataURI,
+        address pool,
         uint256 supply,
-        uint256 liquidity,
+        int24 tickLower,
+        int24 tickUpper,
         Rules rules
     );
-    event Funded(address indexed from, uint256 amount, uint256 balance);
 
     error SupplyOutOfRange();
-    error PairAlreadyExists();
-    error TreasuryEmpty(uint256 available, uint256 needed);
-    error BudgetExhausted(uint256 remaining);
-    error BadConfiguration();
+    error PoolAlreadyExists();
+    error BadRange();
+    error UnexpectedCallback();
+    error NothingMinted();
 
     constructor(
         address ammFactory_,
-        address weth_,
-        uint256 launchLiquidity_,
-        uint256 budgetPerWindow_,
-        uint32 budgetWindow_
+        address quote_,
+        uint24 fee_,
+        uint16 observationCardinality_,
+        Range memory rangeIfToken0_,
+        Range memory rangeIfToken1_
     ) {
-        // Un budget inférieur à un lancement bloquerait tout, et une fenêtre
-        // nulle diviserait par zéro dans l'amortissement.
-        if (
-            launchLiquidity_ == 0 || budgetPerWindow_ < launchLiquidity_
-                || budgetWindow_ == 0
-        ) revert BadConfiguration();
+        _check(rangeIfToken0_);
+        _check(rangeIfToken1_);
 
-        ammFactory = IUniswapV2Factory(ammFactory_);
-        weth = IWETH(weth_);
-        launchLiquidity = launchLiquidity_;
-        budgetPerWindow = budgetPerWindow_;
-        budgetWindow = budgetWindow_;
+        ammFactory = IUniswapV3Factory(ammFactory_);
+        quote = quote_;
+        fee = fee_;
+        observationCardinality = observationCardinality_;
+        rangeIfToken0 = rangeIfToken0_;
+        rangeIfToken1 = rangeIfToken1_;
     }
 
-    /// Abonder est ouvert à tous ; il n'existe aucune fonction de retrait.
-    receive() external payable {
-        emit Funded(msg.sender, msg.value, address(this).balance);
+    function _check(Range memory r) private pure {
+        if (r.tickLower >= r.tickUpper || r.sqrtLower >= r.sqrtUpper) revert BadRange();
     }
 
     function tokenCount() external view returns (uint256) {
         return tokens.length;
     }
 
-    function treasury() external view returns (uint256) {
-        return address(this).balance;
-    }
-
-    /// Ce que la fenêtre laisse encore financer à cet instant.
-    function budgetRemaining() public view returns (uint256) {
-        uint256 spent =
-            RevealRules.decayed(spentInWindow, block.timestamp - spentAt, budgetWindow);
-        return spent >= budgetPerWindow ? 0 : budgetPerWindow - spent;
-    }
-
-    /// Vrai si un lancement passerait maintenant : l'interface interroge ceci
-    /// plutôt que de laisser un créateur payer du gas pour un revert.
-    function canLaunch() external view returns (bool) {
-        return address(this).balance >= launchLiquidity
-            && budgetRemaining() >= launchLiquidity;
-    }
-
-    /**
-     * Débite la fenêtre. Seau percé, même primitive que le plafond d'impact :
-     * la dépense s'efface progressivement au lieu de repartir à zéro sur une
-     * frontière, sinon dix lancements de plus passeraient à minuit pile.
-     */
-    function _spendBudget() private {
-        uint256 available = address(this).balance;
-        if (available < launchLiquidity) revert TreasuryEmpty(available, launchLiquidity);
-
-        uint256 spent =
-            RevealRules.decayed(spentInWindow, block.timestamp - spentAt, budgetWindow);
-        if (spent + launchLiquidity > budgetPerWindow) {
-            revert BudgetExhausted(budgetPerWindow > spent ? budgetPerWindow - spent : 0);
-        }
-
-        spentInWindow = spent + launchLiquidity;
-        spentAt = uint64(block.timestamp);
-    }
-
     /**
      * Un seul appel, une seule transaction : à aucun moment le token n'existe
      * sans son pool, donc il n'y a pas de fenêtre où quelqu'un pourrait créer
-     * une paire concurrente ou acheter avant que les règles soient armées.
+     * un pool concurrent ou acheter avant que les règles soient armées.
+     *
+     * Le créateur ne paie que le gas.
      */
     function launch(
         string calldata name,
@@ -139,9 +116,8 @@ contract RevealLauncher {
         string calldata metadataURI,
         uint256 supply,
         Rules calldata rules
-    ) external returns (address token, address pair) {
+    ) external returns (address token, address pool) {
         if (supply < 1e18 || supply > 1e36) revert SupplyOutOfRange();
-        _spendBudget();
 
         // `validate` tourne aussi dans le constructeur du token ; ici elle évite
         // de déployer quoi que ce soit quand les règles sont invalides.
@@ -150,29 +126,72 @@ contract RevealLauncher {
         RevealToken deployed = new RevealToken(name, symbol, metadataURI, supply, rules);
         token = address(deployed);
 
-        if (ammFactory.getPair(token, address(weth)) != address(0)) revert PairAlreadyExists();
-        pair = ammFactory.createPair(token, address(weth));
+        if (ammFactory.getPool(token, quote, fee) != address(0)) revert PoolAlreadyExists();
+        pool = ammFactory.createPool(token, quote, fee);
 
-        // Tout part au pool avant `initialize` : la phase d'amorçage est la
-        // seule où les transferts sont libres.
-        deployed.transfer(pair, supply);
-        weth.deposit{value: launchLiquidity}();
-        weth.transfer(pair, launchLiquidity);
-        IUniswapV2Pair(pair).mint(BURN);
+        Range memory r = _seed(pool, token, supply);
 
-        deployed.initialize(pair);
+        // Sans cet appel la cardinalité vaut 1 : aucun historique, donc aucun
+        // TWAP, donc aucun drawdown relief tant que le pool n'a pas grandi.
+        IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinality);
+
+        deployed.initialize(pool, quote);
         tokens.push(token);
 
-        emit Launched(
-            token,
-            msg.sender,
-            pair,
-            name,
-            symbol,
-            metadataURI,
-            supply,
-            launchLiquidity,
-            rules
+        emit Launched(token, msg.sender, pool, supply, r.tickLower, r.tickUpper, rules);
+    }
+
+    /**
+     * Ouvre le pool au bord de la plage et y verse toute la supply.
+     *
+     * Le prix initial est exactement celui du bord côté token : v3 calcule
+     * alors une quantité nulle de l'autre actif, ce qui est précisément la
+     * définition d'une position unilatérale.
+     */
+    function _seed(address pool, address token, uint256 supply)
+        private
+        returns (Range memory r)
+    {
+        bool tokenIsToken0 = IUniswapV3Pool(pool).token0() == token;
+        r = tokenIsToken0 ? rangeIfToken0 : rangeIfToken1;
+
+        uint128 liquidity;
+        if (tokenIsToken0) {
+            // Prix = quote par token : la plage est au-dessus du départ, et
+            // acheter fait monter le tick.
+            IUniswapV3Pool(pool).initialize(r.sqrtLower);
+            uint256 mid = Math.mulDiv(r.sqrtLower, r.sqrtUpper, Q96);
+            liquidity = uint128(Math.mulDiv(supply, mid, r.sqrtUpper - r.sqrtLower));
+        } else {
+            // Prix = tokens par quote : tout s'inverse, acheter fait baisser
+            // le tick, et le départ est le bord haut.
+            IUniswapV3Pool(pool).initialize(r.sqrtUpper);
+            liquidity = uint128(Math.mulDiv(supply, Q96, r.sqrtUpper - r.sqrtLower));
+        }
+
+        minting = pool;
+        (uint256 used0, uint256 used1) = IUniswapV3Pool(pool).mint(
+            BURN, r.tickLower, r.tickUpper, liquidity, abi.encode(token)
         );
+        minting = address(0);
+
+        // Un côté doit être nul : sinon la position n'est pas unilatérale et
+        // le launcher devrait de la quote qu'il n'a pas.
+        if (used0 + used1 == 0) revert NothingMinted();
+    }
+
+    /// Le pool réclame ce qu'il vient de créditer. Seul le pool en cours de
+    /// `mint` peut appeler, et il n'est jamais dû autre chose que le token.
+    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata data)
+        external
+        override
+    {
+        if (msg.sender != minting || minting == address(0)) revert UnexpectedCallback();
+
+        address token = abi.decode(data, (address));
+        uint256 owed = amount0Owed + amount1Owed;
+        // Avant `initialize` du token, les transferts sont libres : c'est la
+        // seule fenêtre où la supply peut rejoindre le pool.
+        RevealToken(token).transfer(msg.sender, owed);
     }
 }

@@ -2,8 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IUniswapV2Pair} from "./interfaces/IUniswapV2.sol";
+import {IUniswapV3Pool} from "./interfaces/IUniswapV3.sol";
 import {Rules, RevealRules} from "./libraries/RevealRules.sol";
 
 /**
@@ -19,6 +20,10 @@ import {Rules, RevealRules} from "./libraries/RevealRules.sol";
  *   1. anti-sniper  — sur les achats, pendant les premières minutes ;
  *   2. déblocage    — sur les sorties, contre l'ancienneté et la perte latente ;
  *   3. plafond      — sur les ventes au pool, par fenêtre glissante.
+ *
+ * ATTENTION, propriété structurante : Uniswap emballe les transferts, donc
+ * aucun de nos motifs de revert ne survit au pool. Toute interface doit
+ * interroger `sellableNow` avant de signer, jamais lire l'échec après coup.
  */
 contract RevealToken is ERC20 {
     using RevealRules for Rules;
@@ -26,6 +31,7 @@ contract RevealToken is ERC20 {
     uint16 private constant BPS = 10_000;
     /// Fenêtre du TWAP : le prix de référence ne peut pas être bougé d'un bloc.
     uint32 private constant TWAP_PERIOD = 5 minutes;
+    uint256 private constant Q96 = 1 << 96;
     /**
      * Plafond de supply. Vérifié ici et non seulement dans le launcher : c'est
      * lui qui rend sûrs les `uint128` de `Position`, et un token déployé
@@ -38,7 +44,9 @@ contract RevealToken is ERC20 {
     /// réduirait la base et rouvrirait aussitôt le même pourcentage.
     struct Position {
         uint64 entryTime;
-        uint224 basisPriceX112;
+        /// Tick moyen d'entrée. En ticks et non en prix : l'oracle de v3 rend
+        /// un tick, et 1,0001^n n'est pas calculable proprement sur la chaîne.
+        int24 basisTick;
         uint128 basisAmount;
         uint128 releasedTotal;
         uint128 soldInWindow;
@@ -55,20 +63,26 @@ contract RevealToken is ERC20 {
      */
     string public metadataURI;
 
-    address public pair;
+    address public pool;
+    address public quote;
     bool public tokenIsToken0;
     uint64 public launchedAt;
 
-    /// Oracle TWAP alimenté par les cumuls du pool.
-    uint256 public priceCumulativeLast;
-    uint32 public priceObservedAt;
-    uint224 public priceAverageX112;
+    /**
+     * Référence du plafond d'impact : la réserve de quote relevée lors du
+     * dernier achat, et jamais pendant une vente.
+     *
+     * Ce détour est imposé par l'ordre des opérations de v3 : le pool envoie le
+     * sortant *avant* d'appeler le callback qui nous fait voir l'entrant. Lue
+     * en direct pendant une vente, la réserve est déjà amputée du produit de
+     * cette vente — la vue et le contrôle liraient deux nombres différents, et
+     * une transaction annoncée possible échouerait.
+     */
+    uint128 public quoteMark;
 
     mapping(address => Position) public positions;
 
-    event Entry(
-        address indexed holder, uint256 amount, uint64 entryTime, uint224 basisPriceX112
-    );
+    event Entry(address indexed holder, uint256 amount, uint64 entryTime, int24 basisTick);
     event Exit(address indexed holder, uint256 amount, uint256 unlockedBps, bool viaPool);
 
     error OnlyLauncher();
@@ -96,24 +110,69 @@ contract RevealToken is ERC20 {
 
     /**
      * Arme les règles. Jusqu'à cet appel les transferts sont libres, ce qui
-     * laisse la factory déposer la liquidité ; après, plus rien ne peut être
+     * laisse la factory poser la liquidité ; après, plus rien ne peut être
      * changé — il n'existe aucune autre fonction d'écriture sur la config.
      */
-    function initialize(address pair_) external {
+    function initialize(address pool_, address quote_) external {
         if (msg.sender != launcher) revert OnlyLauncher();
-        if (pair != address(0)) revert AlreadyInitialized();
+        if (pool != address(0)) revert AlreadyInitialized();
 
-        pair = pair_;
-        tokenIsToken0 = IUniswapV2Pair(pair_).token0() == address(this);
+        pool = pool_;
+        quote = quote_;
+        tokenIsToken0 = IUniswapV3Pool(pool_).token0() == address(this);
         launchedAt = uint64(block.timestamp);
-
-        (uint112 r0, uint112 r1,) = IUniswapV2Pair(pair_).getReserves();
-        priceAverageX112 = uint224(tokenIsToken0 ? _uq(r1, r0) : _uq(r0, r1));
-        priceCumulativeLast = _cumulative();
-        priceObservedAt = uint32(block.timestamp);
     }
 
     // ---------------------------------------------------------------- lecture
+
+    /**
+     * Tick moyen sur la fenêtre du TWAP. Retombe sur le tick courant tant que
+     * le pool n'a pas d'historique — au tout premier bloc, il n'y a rien à
+     * moyenner et le prix n'a pas encore pu être manipulé.
+     */
+    function twapTick() public view returns (int24 tick, bool fresh) {
+        uint32[] memory ago = new uint32[](2);
+        ago[0] = TWAP_PERIOD;
+        ago[1] = 0;
+
+        try IUniswapV3Pool(pool).observe(ago) returns (
+            int56[] memory cumulatives, uint160[] memory
+        ) {
+            int56 delta = cumulatives[1] - cumulatives[0];
+            tick = int24(delta / int56(uint56(TWAP_PERIOD)));
+            // La division tronque vers zéro : on arrondit vers le bas comme
+            // le fait la bibliothèque d'oracle de v3.
+            if (delta < 0 && delta % int56(uint56(TWAP_PERIOD)) != 0) tick--;
+            return (tick, true);
+        } catch {
+            (, int24 spot,,,,,) = IUniswapV3Pool(pool).slot0();
+            return (spot, false);
+        }
+    }
+
+    /**
+     * Ticks de perte latente d'une position. Un tick est un pas de 1,0001× ;
+     * l'interface convertit en pourcentage, ce qui est trivial hors chaîne et
+     * coûteux dessus.
+     */
+    function drawdownTicks(address holder) public view returns (uint256) {
+        Position memory p = positions[holder];
+        if (p.basisAmount == 0) return 0;
+
+        // Sans TWAP disponible, aucun relief. Retomber sur le spot ici
+        // laisserait quiconque faire plonger le prix d'un bloc pour débloquer
+        // sa propre position — la seule manipulation qui serait rentable.
+        (int24 now_, bool fresh) = twapTick();
+        if (!fresh) return 0;
+
+        // Le sens du prix dépend de l'ordre des tokens dans la paire : si notre
+        // token est token0, le prix est « quote par token » et baisser le prix
+        // fait baisser le tick. S'il est token1, c'est l'inverse.
+        int256 drop = tokenIsToken0
+            ? int256(p.basisTick) - int256(now_)
+            : int256(now_) - int256(p.basisTick);
+        return drop <= 0 ? 0 : uint256(drop);
+    }
 
     /// Part de la position libérée, temps et perte latente confondus.
     function unlockedBps(address holder) public view returns (uint256) {
@@ -121,16 +180,8 @@ contract RevealToken is ERC20 {
         if (p.basisAmount == 0) return 0;
 
         uint256 byTime = rules.timeUnlockedBps(block.timestamp - p.entryTime);
-        uint256 byRelief = RevealRules.reliefBps(drawdownBps(holder));
+        uint256 byRelief = RevealRules.reliefBps(drawdownTicks(holder));
         return byRelief > byTime ? byRelief : byTime;
-    }
-
-    /// Perte latente de la position, en bps, mesurée contre le TWAP.
-    function drawdownBps(address holder) public view returns (uint256) {
-        uint256 basis = positions[holder].basisPriceX112;
-        uint256 current = priceAverageX112;
-        if (basis == 0 || current >= basis) return 0;
-        return ((basis - current) * BPS) / basis;
     }
 
     /// Ce que la position peut encore laisser sortir, tous canaux confondus.
@@ -144,24 +195,28 @@ contract RevealToken is ERC20 {
         return remaining > balance ? balance : remaining;
     }
 
-    /// Ce que le plafond d'impact laisse passer vers le pool à cet instant.
+    /**
+     * Ce que le plafond d'impact laisse passer vers le pool à cet instant.
+     *
+     * Le plafond se mesure sur la réserve de quote — c'est l'argent qui subit
+     * l'impact. Côté tokens il vaudrait toute la supply au lancement, puisque
+     * la liquidité est posée d'un seul côté : « 1 % » n'y freinerait rien.
+     * Corollaire voulu : tant que personne n'a acheté, la réserve est nulle et
+     * rien ne peut être vendu.
+     */
     function windowRemaining(address holder) public view returns (uint256) {
-        if (pair == address(0)) return 0;
-        Position memory p = positions[holder];
+        if (pool == address(0)) return 0;
 
-        uint256 cap = (_tokenReserve() * rules.impactCapBps) / BPS;
+        uint256 cap = _quoteToTokens((uint256(quoteMark) * rules.impactCapBps) / BPS);
+
+        Position memory p = positions[holder];
         uint256 used =
             RevealRules.decayed(p.soldInWindow, block.timestamp - p.soldAt, rules.impactWindow);
         return used >= cap ? 0 : cap - used;
     }
 
-    /// Avance le TWAP sans transfert : l'interface en a besoin pour afficher
-    /// une perte latente à jour sur une position qui ne bouge pas.
-    function syncOracle() external {
-        if (pair != address(0)) _syncOracle();
-    }
-
-    /// Ce qu'une vente au pool exécuterait maintenant : le plus contraignant des deux.
+    /// Ce qu'une vente au pool exécuterait maintenant : le plus contraignant
+    /// des deux. C'est cette vue qu'une interface doit lire avant de signer.
     function sellableNow(address holder) external view returns (uint256) {
         uint256 byUnlock = releasable(holder);
         uint256 byWindow = windowRemaining(holder);
@@ -172,17 +227,20 @@ contract RevealToken is ERC20 {
 
     function _update(address from, address to, uint256 value) internal override {
         // Émission, destruction, et toute la phase d'amorçage : rien à mesurer.
-        if (from == address(0) || to == address(0) || pair == address(0)) {
+        if (from == address(0) || to == address(0) || pool == address(0)) {
             super._update(from, to, value);
             return;
         }
 
-        _syncOracle();
-
-        if (from == pair) {
+        if (from == pool) {
             _guardBuy(value);
+            // Relève la référence du plafond. Uniquement sur un achat : une
+            // vente la ferait baisser au milieu de sa propre vérification.
+            // La quote de cet achat n'est pas encore versée — le pool paie
+            // après nous — donc on l'estime au prix spot.
+            quoteMark = uint128(_quoteReserve() + _tokensToQuote(value));
             _recordEntry(to, value);
-        } else if (to == pair) {
+        } else if (to == pool) {
             uint256 unlocked = _consumeRelease(from, value);
             _consumeWindow(from, value);
             emit Exit(from, value, unlocked, true);
@@ -206,7 +264,11 @@ contract RevealToken is ERC20 {
         uint256 maxBps = rules.rampBps(sinceLaunch);
         if (maxBps >= BPS) return;
 
-        uint256 maxBuy = (_tokenReserve() * maxBps) / BPS;
+        // Dénominateur : la supply totale. Ni la réserve du pool — elle vaut
+        // toute la supply quand la liquidité est unilatérale — ni la supply en
+        // circulation, qui est nulle au lancement et interdirait alors le tout
+        // premier achat.
+        uint256 maxBuy = (totalSupply() * maxBps) / BPS;
         if (value > maxBuy) revert BuyTooLarge(maxBuy);
     }
 
@@ -224,7 +286,7 @@ contract RevealToken is ERC20 {
     function _consumeWindow(address from, uint256 value) private {
         Position storage p = positions[from];
 
-        uint256 cap = (_tokenReserve() * rules.impactCapBps) / BPS;
+        uint256 cap = _quoteToTokens((uint256(quoteMark) * rules.impactCapBps) / BPS);
         uint256 used =
             RevealRules.decayed(p.soldInWindow, block.timestamp - p.soldAt, rules.impactWindow);
         if (used + value > cap) revert ImpactCapExceeded(cap > used ? cap - used : 0);
@@ -234,77 +296,80 @@ contract RevealToken is ERC20 {
     }
 
     /**
-     * Entrée en position. Ancienneté et prix de revient sont moyennés au
-     * prorata : racheter rajeunit la position, ce qui est exactement ce que la
-     * règle doit faire.
+     * Entrée en position. Ancienneté et tick d'entrée sont moyennés au prorata :
+     * racheter rajeunit la position, ce qui est exactement ce que la règle doit
+     * faire.
      */
     function _recordEntry(address to, uint256 value) private {
         Position storage p = positions[to];
         uint256 held = balanceOf(to);
-        uint224 price = priceAverageX112;
+        // Ici le repli sur le spot est acceptable : gonfler artificiellement
+        // son propre prix d'entrée coûte de l'argent réel et ne rapporte qu'un
+        // relief futur, alors que le refuser bloquerait les premiers achats.
+        (int24 tick,) = twapTick();
 
         if (held == 0) {
             p.entryTime = uint64(block.timestamp);
-            p.basisPriceX112 = price;
+            p.basisTick = tick;
             p.basisAmount = uint128(value);
             p.releasedTotal = 0;
         } else {
             uint256 total = held + value;
             p.entryTime =
                 uint64((uint256(p.entryTime) * held + block.timestamp * value) / total);
-            p.basisPriceX112 =
-                uint224((uint256(p.basisPriceX112) * held + uint256(price) * value) / total);
+            p.basisTick = int24(
+                (int256(p.basisTick) * int256(held) + int256(tick) * int256(value))
+                    / int256(total)
+            );
             p.basisAmount = uint128(uint256(p.basisAmount) + value);
         }
 
-        emit Entry(to, value, p.entryTime, p.basisPriceX112);
+        emit Entry(to, value, p.entryTime, p.basisTick);
     }
 
-    // ----------------------------------------------------------------- oracle
+    // ------------------------------------------------------------------ prix
+
+    function _quoteReserve() private view returns (uint256) {
+        return ERC20(quote).balanceOf(pool);
+    }
 
     /**
-     * Avance le TWAP. Le prix de référence n'est jamais le spot : le faire
-     * plonger le temps d'un bloc pour déclencher le drawdown relief coûterait
-     * de tenir le prix bas pendant toute la fenêtre.
+     * Convertit un montant de quote en tokens, au prix spot du pool.
+     *
+     * Spot et non TWAP, délibérément : manipuler ce prix se retourne contre
+     * l'attaquant. Faire baisser le prix pour élargir le plafond suppose de
+     * vendre d'abord — ce qui consomme ce même plafond — et rend moins d'ETH
+     * sur ce qui passe. Le TWAP reste réservé au drawdown relief, où la
+     * manipulation, elle, serait profitable.
      */
-    function _syncOracle() private {
-        (uint112 r0, uint112 r1, uint32 pairAt) = IUniswapV2Pair(pair).getReserves();
-        if (r0 == 0 || r1 == 0) return;
+    /// Miroir de `_quoteToTokens`, utilisé pour estimer la quote d'un achat
+    /// avant que le pool ne la verse.
+    function _tokensToQuote(uint256 tokenAmount) private view returns (uint256) {
+        if (tokenAmount == 0) return 0;
+        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(pool).slot0();
+        if (sqrtPriceX96 == 0) return 0;
 
-        uint256 cumulative = _cumulative();
-
-        unchecked {
-            // Les horodatages du pool bouclent sur 32 bits : même arithmétique.
-            uint32 nowTs = uint32(block.timestamp);
-            uint32 sincePair = nowTs - pairAt;
-            if (sincePair != 0) {
-                // v2 n'accumule qu'au premier échange d'un bloc : on complète.
-                uint256 spot = tokenIsToken0 ? _uq(r1, r0) : _uq(r0, r1);
-                cumulative += spot * sincePair;
-            }
-
-            uint32 elapsed = nowTs - priceObservedAt;
-            if (elapsed >= TWAP_PERIOD) {
-                priceAverageX112 = uint224((cumulative - priceCumulativeLast) / elapsed);
-                priceCumulativeLast = cumulative;
-                priceObservedAt = nowTs;
-            }
+        if (tokenIsToken0) {
+            uint256 step = Math.mulDiv(tokenAmount, sqrtPriceX96, Q96);
+            return Math.mulDiv(step, sqrtPriceX96, Q96);
         }
+        uint256 half = Math.mulDiv(tokenAmount, Q96, sqrtPriceX96);
+        return Math.mulDiv(half, Q96, sqrtPriceX96);
     }
 
-    function _cumulative() private view returns (uint256) {
-        return tokenIsToken0
-            ? IUniswapV2Pair(pair).price0CumulativeLast()
-            : IUniswapV2Pair(pair).price1CumulativeLast();
-    }
+    function _quoteToTokens(uint256 quoteAmount) private view returns (uint256) {
+        if (quoteAmount == 0) return 0;
+        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(pool).slot0();
+        if (sqrtPriceX96 == 0) return 0;
 
-    function _tokenReserve() private view returns (uint256) {
-        (uint112 r0, uint112 r1,) = IUniswapV2Pair(pair).getReserves();
-        return tokenIsToken0 ? r0 : r1;
-    }
-
-    /// Prix en UQ112x112, la représentation qu'utilisent les cumuls du pool.
-    function _uq(uint112 numerator, uint112 denominator) private pure returns (uint256) {
-        return (uint256(numerator) << 112) / denominator;
+        // Le carré du sqrt déborde un uint256 : on multiplie en deux temps.
+        if (tokenIsToken0) {
+            // prix = quote par token → tokens = quote / prix.
+            uint256 half = Math.mulDiv(quoteAmount, Q96, sqrtPriceX96);
+            return Math.mulDiv(half, Q96, sqrtPriceX96);
+        }
+        // prix = tokens par quote → tokens = quote × prix.
+        uint256 step = Math.mulDiv(quoteAmount, sqrtPriceX96, Q96);
+        return Math.mulDiv(step, sqrtPriceX96, Q96);
     }
 }

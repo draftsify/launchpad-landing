@@ -1,4 +1,7 @@
 {
+  "lib/forge-std": {
+    "rev": "c179529c064588ede54a0661ec3cc98219460d07"
+  },
   "lib\\openzeppelin-contracts": {
     "tag": {
       "name": "v5.1.0",
@@ -9,6 +12,12 @@
     "tag": {
       "name": "v1.0.1",
       "rev": "4dd59067c76dea4a0e8e4bfdda41877a6b16dedc"
+    }
+  },
+  "lib\\v3-core": {
+    "tag": {
+      "name": "v1.0.0",
+      "rev": "e3589b192d0be27e100cd0daaf6c97204fdb1899"
     }
   }
 }
