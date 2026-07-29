@@ -9,6 +9,23 @@ import { BlurWords } from "@/components/site/blur-in";
 import { StackRow } from "@/components/site/stack-row";
 import { Mechanics } from "@/components/site/mechanics";
 
+// Défini ici et non dans mechanics.tsx : une valeur exportée par un module
+// "use client" arrive au composant serveur comme référence, pas comme donnée.
+const RULES = [
+  {
+    title: "Selling opens progressively",
+    body: "A share is sellable from the first block, the rest unlocks steadily. Nobody is locked in, nobody empties the pool in the first minute.",
+  },
+  {
+    title: "Losses open the gate faster",
+    body: "Drawdown raises the floor. A position down 40% is nearly fully liquid regardless of how recently it was bought.",
+  },
+  {
+    title: "Impact is capped per window",
+    body: "No wallet moves the pool beyond a set share within a window. The excess waits for the next one, it is never cancelled.",
+  },
+];
+
 export const metadata: Metadata = {
   title: "How it works — Reveal",
   description:
@@ -52,12 +69,21 @@ export default function HowItWorksPage() {
         </header>
       </section>
 
-      <section className="relative px-4 py-12">
+      <section className="relative px-4 py-10">
         <FullWidthDivider className="-top-px" />
-        <p className="mb-5 text-sm text-muted-foreground">
-          Hover or focus a value to see the rule recompute.
-        </p>
         <Mechanics />
+
+        <div className="mt-8 grid gap-6 sm:grid-cols-3">
+          {RULES.map((rule, i) => (
+            <div key={rule.title} className="space-y-1.5">
+              <p className="font-mono text-[11px] text-muted-foreground">
+                0{i + 1}
+              </p>
+              <h2 className="text-sm font-medium">{rule.title}</h2>
+              <p className="text-sm text-muted-foreground">{rule.body}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="relative px-4 py-12">
