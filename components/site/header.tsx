@@ -3,17 +3,37 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown } from "lucide-react";
+import { ArrowUpRight, ChevronDown, FileText, Route, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { WalletDialog } from "@/components/site/wallet-dialog";
-import { useWallet, shortenAddress } from "@/components/site/wallet-provider";
+import { useWallet } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { label: "Protocol", href: "#protocol", hasMenu: true },
-  { label: "Explore", href: "/launchpad", hasMenu: false },
-  { label: "Docs", href: "#docs", hasMenu: false },
+const PROTOCOL_MENU = [
+  {
+    label: "How it works",
+    href: "/how-it-works",
+    description: "Unlock curves, impact caps, anti-sniper.",
+    icon: Route,
+  },
+  {
+    label: "Terms & Policy",
+    href: "/terms",
+    description: "The rules you agree to when you launch.",
+    icon: FileText,
+  },
+];
+
+const LINKS = [
+  { label: "Explore", href: "/launchpad" },
+  { label: "Docs", href: "#docs" },
 ];
 
 export function Header() {
@@ -45,16 +65,47 @@ export function Header() {
 
         <nav aria-label="Main navigation" className="hidden md:block">
           <ul className="flex items-center">
-            {NAV.map((item) => (
-              <li key={item.label}>
+            <li>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="group/protocol inline-flex h-9 w-max items-center justify-center gap-1 rounded-full px-3 text-sm font-medium text-foreground/90 transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/50 data-[state=open]:bg-muted data-[state=open]:text-foreground"
+                  >
+                    Protocol
+                    <ChevronDown className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[state=open]/protocol:rotate-180" />
+                  </button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="start">
+                  {PROTOCOL_MENU.map((item) => (
+                    <DropdownMenuItem key={item.href} asChild>
+                      <Link href={item.href}>
+                        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border bg-muted/60">
+                          <item.icon className="size-3.5" />
+                        </span>
+                        <span className="space-y-0.5">
+                          <span className="block font-medium">
+                            {item.label}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {item.description}
+                          </span>
+                        </span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </li>
+
+            {LINKS.map((link) => (
+              <li key={link.label}>
                 <Link
-                  href={item.href}
-                  className="inline-flex h-9 w-max items-center justify-center gap-1 rounded-full px-3 text-sm font-medium text-foreground/90 transition-colors hover:bg-muted hover:text-foreground"
+                  href={link.href}
+                  className="inline-flex h-9 w-max items-center justify-center rounded-full px-3 text-sm font-medium text-foreground/90 transition-colors hover:bg-muted hover:text-foreground"
                 >
-                  {item.label}
-                  {item.hasMenu && (
-                    <ChevronDown className="size-3.5 text-muted-foreground" />
-                  )}
+                  {link.label}
                 </Link>
               </li>
             ))}
@@ -91,20 +142,24 @@ export function Header() {
 
       <div className="hidden items-center gap-2 md:flex">
         <WalletDialog>
-          <Button variant="outline">
-            {account ? (
-              <>
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-full bg-foreground"
-                />
-                <span className="font-mono">{shortenAddress(account)}</span>
-                <span className="sr-only">Wallet connected</span>
-              </>
-            ) : (
-              "Connect wallet"
-            )}
-          </Button>
+          {account ? (
+            // Connecté : l'icône suffit, l'adresse est déjà lisible dans
+            // l'extension et alourdissait la barre.
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative"
+              aria-label="Wallet connected"
+            >
+              <Wallet />
+              <span
+                aria-hidden
+                className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-foreground"
+              />
+            </Button>
+          ) : (
+            <Button variant="outline">Connect wallet</Button>
+          )}
         </WalletDialog>
         <Button asChild>
           <Link href="#create">
@@ -120,20 +175,27 @@ export function Header() {
           className="absolute inset-x-0 top-14 border-b bg-background/95 backdrop-blur-lg md:hidden"
         >
           <div className="flex flex-col gap-1 px-4 py-4">
-            {NAV.map((item) => (
+            {[...PROTOCOL_MENU, ...LINKS].map((item) => (
               <Link
-                key={item.label}
+                key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-sm text-foreground/90 transition-colors hover:bg-muted"
               >
-                {item.label}
+                {"label" in item ? item.label : null}
               </Link>
             ))}
             <div className="mt-2 flex flex-col gap-2">
               <WalletDialog>
                 <Button variant="outline" onClick={() => setOpen(false)}>
-                  {account ? shortenAddress(account) : "Connect wallet"}
+                  {account ? (
+                    <>
+                      <Wallet />
+                      Wallet connected
+                    </>
+                  ) : (
+                    "Connect wallet"
+                  )}
                 </Button>
               </WalletDialog>
               <Button asChild>
