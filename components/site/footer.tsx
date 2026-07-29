@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const LINKS = [
   { label: "Protocol", href: "#protocol" },
-  { label: "Explore", href: "#explore" },
+  { label: "Explore", href: "/launchpad" },
   { label: "Docs", href: "#docs" },
 ];
 

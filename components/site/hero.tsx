@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Play, Sparkles } from "lucide-react";
+import { ArrowRight, Coins, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { HeroBars } from "@/components/site/hero-bars";
@@ -50,9 +50,9 @@ export function Hero() {
         <BlurIn delay={1.05} duration={1} blur={8} y={12}>
           <div className="flex flex-row flex-wrap items-center justify-center gap-3 pt-2">
             <Button variant="card" size="lg" asChild>
-              <Link href="#demo">
-                <Play />
-                Watch demo
+              <Link href="/launchpad">
+                <Coins />
+                See tokens
               </Link>
             </Button>
             <Button size="lg" asChild>

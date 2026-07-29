@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { label: "Protocol", href: "#protocol", hasMenu: true },
-  { label: "Explore", href: "#explore", hasMenu: true },
+  { label: "Explore", href: "/launchpad", hasMenu: false },
   { label: "Docs", href: "#docs", hasMenu: false },
 ];
 
