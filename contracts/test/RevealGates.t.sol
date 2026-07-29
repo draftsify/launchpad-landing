@@ -54,8 +54,8 @@ contract RevealGatesTest is RevealBase {
         assertApproxEqAbs(token.unlockedBps(alice), 1_000, 5, "10 % a l'entree");
         assertApproxEqRel(token.releasable(alice), token.balanceOf(alice) / 10, 0.02e18);
 
-        _warp(12 hours);
-        assertApproxEqAbs(token.unlockedBps(alice), 5_500, 30, "moitie a mi-parcours");
+        _warp(30 minutes);
+        assertApproxEqAbs(token.unlockedBps(alice), 5_500, 60, "moitie a mi-parcours");
 
         _fullyUnlock();
         assertEq(token.unlockedBps(alice), 10_000, "entierement libere");

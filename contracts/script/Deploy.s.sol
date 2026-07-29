@@ -5,6 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 
 import {RevealLauncher} from "../src/RevealLauncher.sol";
+import {Rules} from "../src/libraries/RevealRules.sol";
 
 interface ITickMathExposer {
     function sqrtRatioAt(int24 tick) external pure returns (uint160);
@@ -44,6 +45,22 @@ contract Deploy is Script, StdCheats {
     int24 constant TICK_LOW = -203_200;
     int24 constant TICK_HIGH = -179_000;
 
+    /**
+     * Règles du protocole, identiques pour tout lancement. Un dixième vendable
+     * dès le premier bloc, tout ouvert au bout d'une heure : de quoi étaler la
+     * première vague sans immobiliser qui que ce soit.
+     */
+    function _rules() private pure returns (Rules memory) {
+        return Rules({
+            initialUnlockBps: 1_000,
+            unlockSeconds: 1 hours,
+            impactCapBps: 1_000,
+            impactWindow: 5 minutes,
+            launchDelay: 30,
+            buyRamp: 10 minutes
+        });
+    }
+
     error UnknownChain(uint256 chainId);
 
     function run() external returns (RevealLauncher launcher) {
@@ -71,6 +88,7 @@ contract Deploy is Script, StdCheats {
             FEE,
             CARDINALITY,
             SUPPLY,
+            _rules(),
             _range(tm, TICK_LOW, TICK_HIGH),
             // Quand notre token est token1 le prix s'inverse : plage symétrique,
             // bornes échangées.

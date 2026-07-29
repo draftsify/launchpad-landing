@@ -54,6 +54,13 @@ contract RevealLauncher is IUniswapV3MintCallback {
      * capitalisation initiale dans la même proportion.
      */
     uint256 public immutable supply;
+    /**
+     * Règles identiques pour tout lancement. Les laisser au choix du créateur
+     * revenait à laisser chacun choisir combien il se contraint — ce qui n'est
+     * plus une contrainte. Elles sont écrites une fois ici, et le launcher n'a
+     * aucune fonction pour les modifier.
+     */
+    Rules public rules;
 
     Range public rangeIfToken0;
     Range public rangeIfToken1;
@@ -89,6 +96,7 @@ contract RevealLauncher is IUniswapV3MintCallback {
         uint24 fee_,
         uint16 observationCardinality_,
         uint256 supply_,
+        Rules memory rules_,
         Range memory rangeIfToken0_,
         Range memory rangeIfToken1_
     ) {
@@ -101,6 +109,8 @@ contract RevealLauncher is IUniswapV3MintCallback {
         observationCardinality = observationCardinality_;
         if (supply_ < 1e18 || supply_ > 1e36) revert SupplyOutOfRange();
         supply = supply_;
+        RevealRules.validate(rules_);
+        rules = rules_;
         rangeIfToken0 = rangeIfToken0_;
         rangeIfToken1 = rangeIfToken1_;
     }
@@ -123,13 +133,8 @@ contract RevealLauncher is IUniswapV3MintCallback {
     function launch(
         string calldata name,
         string calldata symbol,
-        string calldata metadataURI,
-        Rules calldata rules
+        string calldata metadataURI
     ) external returns (address token, address pool) {
-        // `validate` tourne aussi dans le constructeur du token ; ici elle évite
-        // de déployer quoi que ce soit quand les règles sont invalides.
-        RevealRules.validate(rules);
-
         RevealToken deployed = new RevealToken(name, symbol, metadataURI, supply, rules);
         token = address(deployed);
 

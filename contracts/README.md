@@ -1,8 +1,13 @@
 # Reveal — contracts
 
 The protocol itself: a token whose transfer hook meters selling. No admin, no
-pause, no allowlist — every parameter is chosen at launch and there is no
-function that can change one afterwards.
+pause, no allowlist, and no function that can change a rule after deployment.
+
+The rules are the protocol's, not the creator's: they live on the launcher and
+are identical for every token. Letting each creator pick how constrained they
+are is not a constraint, and it makes two launches incomparable — which matters
+here, because "10% of the pool per window" only means something against a
+reference everyone shares.
 
 ```
 RevealLauncher.launch()  →  RevealToken  +  Uniswap V3 pool  (position locked)
@@ -22,7 +27,7 @@ The position is minted to `0xdEaD`. A V3 position is keyed by
 `(owner, tickLower, tickUpper)`, so nobody can ever call `burn` or `collect` on
 it: neither the liquidity nor the fees it accrues can leave.
 
-Supply is fixed at the launcher, not chosen per token. The tick range fixes a
+Supply, like the rules, is fixed at the launcher. The tick range fixes a
 price per token, so opening market cap is supply × that price — a variable
 supply would move the opening valuation with it.
 

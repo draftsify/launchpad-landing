@@ -18,9 +18,8 @@ import { XIcon } from "@/components/x-icon";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
 import {
-  PRESETS,
+  RULES,
   formatDuration,
-  type Rules,
 } from "@/lib/presets";
 import { cn } from "@/lib/utils";
 
@@ -129,9 +128,6 @@ export function CreateForm() {
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
   const [discord, setDiscord] = useState("");
-  const [presetId, setPresetId] = useState(PRESETS[0].id);
-  const [rules, setRules] = useState<Rules>(PRESETS[0].rules);
-  const [advanced, setAdvanced] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const objectUrl = useRef<string | null>(null);
@@ -152,21 +148,8 @@ export function CreateForm() {
     setImage(url);
   }
 
-  function applyPreset(id: string) {
-    const preset = PRESETS.find((p) => p.id === id);
-    if (!preset) return;
-    setPresetId(id);
-    setRules(preset.rules);
-  }
-
-  function editRule(key: keyof Rules, value: number) {
-    setPresetId("custom");
-    setRules((r) => ({ ...r, [key]: value }));
-  }
-
   const displayName = name.trim() || "Your token";
   const displayTicker = ticker.trim() || "TICKER";
-  const activePreset = PRESETS.find((p) => p.id === presetId);
 
   return (
     <div className="grid gap-10 lg:grid-cols-[1fr_minmax(0,340px)] lg:gap-12">
@@ -341,145 +324,31 @@ export function CreateForm() {
         <Section
           step="03"
           title="Selling rules"
-          hint="The part no other launchpad asks you. These are immutable once deployed."
+          hint="Identical for every launch on Reveal, and not yours to change. Letting each creator pick how constrained they are would make two tokens incomparable."
         >
-          <div className="grid gap-2 sm:grid-cols-3">
-            {PRESETS.map((preset) => {
-              const active = preset.id === presetId;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => applyPreset(preset.id)}
-                  aria-pressed={active}
-                  className={cn(
-                    "rounded-xl border p-3 text-left transition-colors",
-                    active
-                      ? "border-foreground/30 bg-muted"
-                      : "bg-card hover:bg-muted/60"
-                  )}
-                >
-                  <span className="block text-sm font-medium">
-                    {preset.label}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {preset.summary}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            {[
+              ["Sellable at launch", `${RULES.initialUnlock}%`],
+              ["Fully unlocked after", formatDuration(RULES.unlockHours)],
+              [
+                "Impact cap",
+                `${RULES.impactCap}% / ${RULES.impactWindow} min`,
+              ],
+              ["First buy opens", `${RULES.launchDelay}s after deploy`],
+            ].map(([label, value]) => (
+              <div key={label} className="space-y-1">
+                <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                  {label}
+                </dt>
+                <dd className="font-mono text-sm tabular-nums">{value}</dd>
+              </div>
+            ))}
+          </dl>
 
-          <button
-            type="button"
-            onClick={() => setAdvanced((v) => !v)}
-            aria-expanded={advanced}
-            className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-          >
-            {advanced ? "Hide" : "Show"} individual parameters
-          </button>
-
-          {advanced && (
-            <motion.div
-              initial={reduce ? undefined : { opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: EASE }}
-              className="grid gap-3 sm:grid-cols-2"
-            >
-              <Field
-                label="Sellable at launch"
-                htmlFor="rule-initial"
-                hint="Percent of every position, from the first block."
-              >
-                <PrefixInput
-                  id="rule-initial"
-                  icon={null}
-                  prefix="%"
-                  value={String(rules.initialUnlock)}
-                  onChange={(e) =>
-                    editRule("initialUnlock", Number(e.target.value) || 0)
-                  }
-                  inputMode="numeric"
-                />
-              </Field>
-              <Field
-                label="Fully unlocked after"
-                htmlFor="rule-duration"
-                hint="Hours until a position reaches 100% sellable."
-              >
-                <PrefixInput
-                  id="rule-duration"
-                  icon={null}
-                  prefix="h"
-                  value={String(rules.unlockHours)}
-                  onChange={(e) =>
-                    editRule("unlockHours", Number(e.target.value) || 0)
-                  }
-                  inputMode="numeric"
-                />
-              </Field>
-              <Field
-                label="Impact cap"
-                htmlFor="rule-cap"
-                hint="Max share of liquidity one wallet can move per window."
-              >
-                <PrefixInput
-                  id="rule-cap"
-                  icon={null}
-                  prefix="%"
-                  value={String(rules.impactCap)}
-                  onChange={(e) =>
-                    editRule("impactCap", Number(e.target.value) || 0)
-                  }
-                  inputMode="decimal"
-                />
-              </Field>
-              <Field label="Impact window" htmlFor="rule-window">
-                <PrefixInput
-                  id="rule-window"
-                  icon={null}
-                  prefix="min"
-                  value={String(rules.impactWindow)}
-                  onChange={(e) =>
-                    editRule("impactWindow", Number(e.target.value) || 0)
-                  }
-                  inputMode="numeric"
-                />
-              </Field>
-              <Field
-                label="Launch delay"
-                htmlFor="rule-delay"
-                hint="Seconds before the first buy is accepted."
-              >
-                <PrefixInput
-                  id="rule-delay"
-                  icon={null}
-                  prefix="s"
-                  value={String(rules.launchDelay)}
-                  onChange={(e) =>
-                    editRule("launchDelay", Number(e.target.value) || 0)
-                  }
-                  inputMode="numeric"
-                />
-              </Field>
-              <Field
-                label="Buy ramp"
-                htmlFor="rule-ramp"
-                hint="Minutes over which the max buy size grows."
-              >
-                <PrefixInput
-                  id="rule-ramp"
-                  icon={null}
-                  prefix="min"
-                  value={String(rules.buyRamp)}
-                  onChange={(e) =>
-                    editRule("buyRamp", Number(e.target.value) || 0)
-                  }
-                  inputMode="numeric"
-                />
-              </Field>
-            </motion.div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            A position also opens faster when it is underwater: half the entry
+            price releases it entirely, whatever the clock says.
+          </p>
         </Section>
       </form>
 
@@ -554,30 +423,29 @@ export function CreateForm() {
                 Sellable at launch
               </span>
               <span className="font-mono text-xs tabular-nums">
-                {rules.initialUnlock}%
+                {RULES.initialUnlock}%
               </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
               <motion.div
                 className="h-full rounded-full bg-foreground/70"
                 initial={false}
-                animate={{ width: `${rules.initialUnlock}%` }}
+                animate={{ width: `${RULES.initialUnlock}%` }}
                 transition={
                   reduce ? { duration: 0 } : { duration: 0.4, ease: EASE }
                 }
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Reaches 100% after {formatDuration(rules.unlockHours)}. Capped at{" "}
-              {rules.impactCap}% of liquidity per {rules.impactWindow} min.
+              Reaches 100% after {formatDuration(RULES.unlockHours)}. Capped at{" "}
+              {RULES.impactCap}% of liquidity per {RULES.impactWindow} min.
             </p>
           </div>
 
           <dl className="space-y-1.5 border-t pt-4 text-xs">
             {[
-              ["Preset", activePreset?.label ?? "Custom"],
               ["Your cost", "Gas only"],
-              ["First buy opens", `${rules.launchDelay}s after deploy`],
+              ["First buy opens", `${RULES.launchDelay}s after deploy`],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">{label}</dt>

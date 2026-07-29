@@ -125,7 +125,7 @@ export function TokenBrowser({ tokens }: { tokens: Token[] }) {
             <div className="space-y-1">
               <p className="font-medium">Your token here</p>
               <p className="mx-auto max-w-xs text-sm text-muted-foreground">
-                Set your unlock curve and anti-sniper rules, then launch.
+                Name it, add an image, launch. You pay gas.
               </p>
             </div>
             <Button variant="card" asChild>

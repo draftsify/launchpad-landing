@@ -58,7 +58,7 @@ export default function DocsPage() {
             <DocSection
               id="overview"
               title="Overview"
-              lede="Reveal is a set of contracts that apply configurable selling rules to tokens launched through it."
+              lede="Reveal is a set of contracts that apply the same selling rules to every token launched through it."
             >
               <Prose>
                 The protocol does not custody funds, does not execute trades on

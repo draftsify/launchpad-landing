@@ -14,7 +14,7 @@ const SECTIONS = [
     id: "protocol",
     title: "1. What Reveal is",
     body: [
-      "Reveal is a set of smart contracts that apply configurable selling rules to tokens launched through it. The protocol does not custody funds, does not execute trades on your behalf, and does not decide who may sell.",
+      "Reveal is a set of smart contracts that apply the same selling rules to every token launched through it. The rules are fixed by the protocol, not by you. It does not custody funds, does not execute trades on your behalf, and does not decide who may sell.",
       "Every rule that applies to a token — unlock duration, initial sellable share, drawdown thresholds, impact caps, anti-sniper settings — is fixed at creation and readable on chain before the first buy.",
     ],
   },
@@ -38,7 +38,7 @@ const SECTIONS = [
     id: "creators",
     title: "4. If you launch a token",
     body: [
-      "You choose the parameters and are solely responsible for them, for the token's representations, and for compliance in your jurisdiction. Reveal does not review, endorse or vet launches.",
+      "You are solely responsible for the token you launch, for its representations, and for compliance in your jurisdiction. The selling rules are the protocol's and identical for everyone; nothing else about your launch is reviewed, endorsed or vetted.",
       "Parameters cannot be changed after deployment. Choose them knowing they bind you as much as they bind buyers.",
     ],
   },

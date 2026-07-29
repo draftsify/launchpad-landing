@@ -54,7 +54,7 @@ abstract contract RevealBase is Test {
     function defaultRules() internal pure returns (Rules memory) {
         return Rules({
             initialUnlockBps: 1_000, // 10 %
-            unlockSeconds: 24 hours,
+            unlockSeconds: 1 hours,
             impactCapBps: 1_000, // 10 % de la réserve de quote
             impactWindow: 5 minutes,
             launchDelay: 30,
@@ -71,13 +71,14 @@ abstract contract RevealBase is Test {
             FEE,
             CARDINALITY,
             SUPPLY,
+            defaultRules(),
             _range(TICK_LOW, TICK_HIGH),
             // Quand notre token est token1 le prix s'inverse : la plage est la
             // symétrique par rapport à zéro, bornes échangées.
             _range(-TICK_HIGH, -TICK_LOW)
         );
 
-        _launch(defaultRules());
+        _launch();
     }
 
     function _range(int24 lower, int24 upper)
@@ -107,10 +108,10 @@ abstract contract RevealBase is Test {
     }
 
     /// Le créateur ne paie que le gas : la liquidité est unilatérale.
-    function _launch(Rules memory rules) internal {
+    function _launch() internal {
         vm.prank(creator);
         (address t, address p) =
-            launcher.launch("Reveal", "REVEAL", METADATA_URI, rules);
+            launcher.launch("Reveal", "REVEAL", METADATA_URI);
         token = RevealToken(t);
         pool = IUniswapV3Pool(p);
         tokenFirst = token.tokenIsToken0();
@@ -159,7 +160,7 @@ abstract contract RevealBase is Test {
 
     /// Laisse le token vendable : au-delà de `unlockSeconds`, le temps a tout ouvert.
     function _fullyUnlock() internal {
-        _warp(24 hours + 1);
+        _warp(1 hours + 1);
     }
 
     function _pastRamp() internal {
