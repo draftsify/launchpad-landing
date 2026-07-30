@@ -9,6 +9,7 @@ import { activeChain, isDeployed } from "@/lib/chain";
 import { matchesQuery, SORTS, sortLaunches, type SortId } from "@/lib/tokens";
 import { Button } from "@/components/ui/button";
 import { TokenCard } from "@/components/site/token-card";
+import { useActivityByToken } from "@/components/site/use-activity";
 import { useLaunches } from "@/components/site/use-launches";
 import { cn } from "@/lib/utils";
 
@@ -37,12 +38,19 @@ function Empty({
 
 export function TokenBrowser() {
   const { data: launches, loading, error } = useLaunches();
+  // Volume et variation, relus en un appel pour toute la liste.
+  const { byToken } = useActivityByToken();
   const [sort, setSort] = useState<SortId>("recent");
   const [query, setQuery] = useState("");
 
   const shown = useMemo(
-    () => sortLaunches(launches.filter((l) => matchesQuery(l, query)), sort),
-    [launches, query, sort]
+    () =>
+      sortLaunches(
+        launches.filter((l) => matchesQuery(l, query)),
+        sort,
+        (l) => byToken.get(l.address.toLowerCase())?.volume24h ?? 0
+      ),
+    [launches, query, sort, byToken]
   );
 
   const active = SORTS.find((s) => s.id === sort)!;
@@ -166,7 +174,12 @@ export function TokenBrowser() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <AnimatePresence mode="popLayout">
           {shown.map((launch, i) => (
-            <TokenCard key={launch.address} launch={launch} index={i} />
+            <TokenCard
+              key={launch.address}
+              launch={launch}
+              activity={byToken.get(launch.address.toLowerCase())}
+              index={i}
+            />
           ))}
         </AnimatePresence>
 

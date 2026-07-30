@@ -8,6 +8,8 @@ import { formatAge, formatEth, formatTokens } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { CopyAddress } from "@/components/site/copy-address";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { PriceChart } from "@/components/site/price-chart";
+import { useActivity } from "@/components/site/use-activity";
 import { TokenMark } from "@/components/site/token-mark";
 import { TradePanel } from "@/components/site/trade-panel";
 import { useLaunch } from "@/components/site/use-launches";
@@ -36,6 +38,18 @@ export function TokenDetail({ slug }: { slug: string }) {
   const { data: launch, loading, error, reload } = useLaunch(slug);
   // Les règles affichées sont celles que le launcher applique, pas une copie.
   const rules = useRules();
+  // L'historique, relu depuis les journaux du pool par /api/activity.
+  const activity = useActivity(slug);
+
+  /**
+   * Une valeur issue des journaux, ou un tiret.
+   *
+   * Le tiret n'est pas un détail de présentation : « 0 trade » et « pas encore
+   * relu » se ressemblent à l'écran et ne veulent pas du tout dire la même
+   * chose. Tant que la relecture n'a pas abouti, on n'affirme rien.
+   */
+  const indexed = (read: (a: NonNullable<typeof activity.data>) => string) =>
+    activity.data ? read(activity.data) : "—";
 
   if (!isDeployed || error || (!loading && !launch)) {
     return (
@@ -161,18 +175,54 @@ export function TokenDetail({ slug }: { slug: string }) {
         ))}
       </div>
 
+      {/* Seconde rangée : ce qui vient des journaux et non de l'état. Un tiret
+          plutôt qu'un zéro tant que la relecture n'a pas abouti — zéro trade et
+          « pas encore lu » ne sont pas la même information. */}
+      <div className="mt-2 grid divide-y rounded-2xl border sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
+        {[
+          ["24h volume", indexed((a) => formatEth(a.volume24h))],
+          ["24h change", indexed((a) => (a.change24h === null ? "No trade 24h ago" : `${a.change24h >= 0 ? "+" : ""}${a.change24h.toFixed(1)}%`))],
+          ["Trades", indexed((a) => a.trades.toLocaleString("en-US"))],
+          ["Holders", indexed((a) => a.holders.toLocaleString("en-US"))],
+        ].map(([label, value]) => (
+          <div key={label} className="space-y-1 px-4 py-3 sm:px-5">
+            <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
+              {label}
+            </p>
+            <p className="text-lg font-medium tracking-tight tabular-nums">{value}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,360px)]">
         <div className="space-y-4">
-          {/* Un nœud répond l'état présent, pas le prix d'hier : un historique
-              demande un indexeur qui enregistre chaque swap. Tant qu'il n'existe
-              pas, on le dit — une courbe reconstituée serait une invention. */}
-          <section className="flex min-h-52 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed bg-card/40 p-6 text-center">
-            <p className="font-medium">Price history isn&apos;t indexed yet</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Everything above is read live from the pool. A chart needs
-              yesterday&apos;s price, which a node cannot answer — that takes an
-              indexer, and it isn&apos;t running.
-            </p>
+          {/* Le prix d'hier n'est pas un état : il est reconstruit en relisant
+              les Swap du pool. C'est ce que fait /api/activity, et la courbe
+              ci-dessous ne contient que des prix qui ont réellement été cotés. */}
+          <section className="rounded-2xl border bg-card p-5">
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-medium">Price</h2>
+              <p className="text-xs text-muted-foreground">
+                Rebuilt from every swap this pool has emitted.
+              </p>
+            </div>
+
+            {activity.loading ? (
+              <div className="flex h-[200px] items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Replaying the pool&apos;s swaps…
+              </div>
+            ) : activity.error ? (
+              <div className="flex h-[200px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 text-center">
+                <p className="text-sm font-medium">The swap history could not be read</p>
+                <p className="max-w-sm text-xs text-muted-foreground">
+                  The price above still comes straight from the pool and is
+                  current. Only the history failed. {activity.error}
+                </p>
+              </div>
+            ) : (
+              <PriceChart points={activity.data?.series ?? []} />
+            )}
           </section>
 
           <section className="rounded-2xl border bg-card p-5">

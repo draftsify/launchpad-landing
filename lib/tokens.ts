@@ -12,29 +12,39 @@ export function matchesQuery(launch: Launch, query: string) {
   );
 }
 
-export type SortId = "recent" | "marketCap" | "liquidity";
+export type SortId = "recent" | "volume" | "marketCap" | "liquidity";
 
 /**
- * Trois tris, et pas six.
+ * Quatre tris, tous calculables.
  *
- * « Trending » classait par variation sur 24 h et « Nearly unlocked » par part
- * de supply encore bloquée. Aucun des deux n'est calculable en lisant la
- * chaîne : le premier demande le prix d'hier, le second l'état de toutes les
- * positions. Ils fonctionnaient sur les tokens fictifs. Les garder aurait
- * voulu dire soit un onglet qui ne trie rien, soit inventer le critère.
+ * « Nearly unlocked » reste absent : classer par part de supply encore bloquée
+ * demanderait l'état de toutes les positions ouvertes, que ni la chaîne ni les
+ * journaux ne donnent sans énumérer les détenteurs. « Volume » est revenu le
+ * jour où les journaux ont été relus — avant, il aurait fallu l'inventer.
  */
 export const SORTS: { id: SortId; label: string; hint: string }[] = [
   { id: "recent", label: "Recent", hint: "Newest launch first" },
+  { id: "volume", label: "24h volume", hint: "Most traded in the last day" },
   { id: "marketCap", label: "Market cap", hint: "Largest first" },
   { id: "liquidity", label: "Liquidity", hint: "Deepest pool first" },
 ];
 
-const COMPARE: Record<SortId, (a: Launch, b: Launch) => number> = {
+/** Volume échangé sur 24 h, par adresse. Zéro quand l'historique n'est pas lu. */
+export type VolumeLookup = (launch: Launch) => number;
+
+const COMPARE: Record<SortId, (a: Launch, b: Launch, volume: VolumeLookup) => number> = {
   recent: (a, b) => b.launchedAt - a.launchedAt,
+  // À volume égal — deux tokens sans échange, par exemple — le plus récent
+  // passe devant, plutôt qu'un ordre arbitraire hérité du registre.
+  volume: (a, b, volume) => volume(b) - volume(a) || b.launchedAt - a.launchedAt,
   marketCap: (a, b) => b.marketCapEth - a.marketCapEth,
   liquidity: (a, b) => b.liquidityEth - a.liquidityEth,
 };
 
-export function sortLaunches(launches: Launch[], sort: SortId) {
-  return [...launches].sort(COMPARE[sort]);
+export function sortLaunches(
+  launches: Launch[],
+  sort: SortId,
+  volume: VolumeLookup = () => 0
+) {
+  return [...launches].sort((a, b) => COMPARE[sort](a, b, volume));
 }

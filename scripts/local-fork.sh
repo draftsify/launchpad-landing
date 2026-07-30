@@ -67,14 +67,21 @@ done
 # chaîne est un proxy, donc son solde et ses allowances vivent dans des slots de
 # mapping calculés par adresse — inatteignables plus tard. On les touche tous
 # maintenant, pour chaque compte que l'interface utilisera.
-for a in $A0 $A1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC; do
+# Les six premiers comptes anvil, pas seulement ceux que ce script utilise :
+# scripts/fork-activity.sh se sert des suivants, et un compte non préchauffé
+# devient illisible dès que l'amont cesse de servir le bloc forké.
+for a in $A0 $A1 \
+  0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC \
+  0x90F79bf6EB2c4f870365E785982E1f101E93b906 \
+  0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65 \
+  0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc; do
   cast call $WETH 'balanceOf(address)(uint256)' "$a" --rpc-url $R >/dev/null
   cast call $WETH 'allowance(address,address)(uint256)' "$a" $ROUTER --rpc-url $R >/dev/null
 done
 for a in $WETH $ROUTER $QUOTER $FACTORY; do
   cast call $WETH 'balanceOf(address)(uint256)' "$a" --rpc-url $R >/dev/null
 done
-echo "  soldes et allowances WETH en cache pour 3 comptes et 4 contrats"
+echo "  soldes et allowances WETH en cache pour 6 comptes et 4 contrats"
 
 step "Déploiement du protocole"
 pushd contracts >/dev/null

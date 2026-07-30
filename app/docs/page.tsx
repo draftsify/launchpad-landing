@@ -473,6 +473,26 @@ const sellable = await token.read.sellableNow([holder]);`}</Code>
                 price, a holder count, a volume chart. A node answers the
                 present only.
               </Prose>
+              <Prose>
+                This interface runs one, and it holds no database. Filtering{" "}
+                <Inline>eth_getLogs</Inline> on a single pool address returns
+                that pool&apos;s entire history in one call, so volume, trade
+                count and the price curve are recomputed from the{" "}
+                <Inline>Swap</Inline> logs on request and cached for thirty
+                seconds. Holders come the same way: an ERC-20 cannot enumerate
+                its own holders, so the <Inline>Transfer</Inline> logs are
+                replayed into balances.
+              </Prose>
+              <Code>{`# every swap the pool ever emitted, in one request
+curl "$RPC" -d '{"method":"eth_getLogs","params":[{
+  "address":"<pool>","fromBlock":"0x0","toBlock":"latest"}]}'`}</Code>
+              <Prose>
+                The node caps a query at 10 000 matched logs, which the reader
+                handles by halving the block range and retrying. That keeps
+                working as pools age, but it stops being one request — a pool
+                busy enough eventually costs several, and the answer arrives
+                more slowly.
+              </Prose>
             </DocSection>
 
             <DocSection
@@ -506,6 +526,11 @@ const sellable = await token.read.sellableNow([holder]);`}</Code>
                     term: "Errors do not survive the pool",
                     description:
                       "Uniswap wraps transfers, so a refused sell reaches the user as TF, not as PositionLocked. Any interface that skips the sellableNow view will show its users a failure it cannot explain.",
+                  },
+                  {
+                    term: "History is recomputed, not stored",
+                    description:
+                      "The indexer keeps no database: every figure is rebuilt from logs on request. That means nothing to fall out of sync, and no historical claim that cannot be re-derived from the chain — but it also means the cost grows with a pool's history, and that a node refusing to serve logs takes the whole history down with it. The live price never depends on it.",
                   },
                 ]}
               />

@@ -13,11 +13,16 @@ import { erc20Abi, poolAbi, priceFromSqrt } from "@/lib/uniswap";
  * launcher, les métadonnées du token lui-même, le prix du tick courant du pool,
  * la liquidité du solde de quote du pool.
  *
- * Ce qui n'y est pas y manque parce qu'un nœud ne peut pas le rendre. Le nombre
- * de détenteurs suppose de rejouer tous les transferts ; la variation sur 24 h
- * suppose de connaître le prix d'hier ; la part de supply encore sous déblocage
- * suppose de connaître toutes les positions. Les trois demandent un indexeur.
- * Les inventer était exactement ce qui a été retiré du site.
+ * Ce qui n'y est pas n'y est pas parce qu'un nœud ne le rend pas en une lecture.
+ * Le nombre de détenteurs suppose de rejouer tous les transferts, la variation
+ * sur 24 h de connaître le prix d'hier : c'est le travail de `lib/indexer.ts`,
+ * qui relit les journaux et répond par `/api/activity`. Deux chemins séparés,
+ * volontairement — le prix affiché ne doit jamais dépendre de la disponibilité
+ * de l'historique.
+ *
+ * La part de supply encore sous déblocage reste absente : elle supposerait de
+ * connaître toutes les positions ouvertes, ce que ni l'état ni les journaux ne
+ * donnent sans énumérer les détenteurs un par un.
  */
 export type Launch = {
   address: `0x${string}`;

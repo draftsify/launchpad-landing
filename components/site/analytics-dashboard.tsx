@@ -6,7 +6,9 @@ import { ArrowRight, Coins, Loader2, TriangleAlert } from "lucide-react";
 
 import { activeChain, isDeployed } from "@/lib/chain";
 import { dailyLaunches, statsFrom } from "@/lib/analytics";
+import { formatEth } from "@/lib/format";
 import { BarChart } from "@/components/site/bar-chart";
+import { useProtocolActivity } from "@/components/site/use-activity";
 import { Button } from "@/components/ui/button";
 import { CountUp } from "@/components/site/count-up";
 import { useLaunches } from "@/components/site/use-launches";
@@ -30,6 +32,12 @@ function Frame({
 
 export function AnalyticsDashboard() {
   const { data: launches, loading, error } = useLaunches();
+  // Volume et trades ne sont pas des états : ils viennent des journaux.
+  const activity = useProtocolActivity();
+
+  /** Un tiret tant que la relecture n'a rien rendu — pas un zéro. */
+  const traded = (read: (a: NonNullable<typeof activity.data>) => string) =>
+    activity.data ? read(activity.data) : "—";
 
   // Le temps entre dans le calcul (fenêtre de 24 h, axe des jours) : il est lu
   // une fois par rendu, à côté des données qu'il date.
@@ -136,33 +144,46 @@ export function AnalyticsDashboard() {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <BarChart
-          title="Token launches"
-          subtitle="Per day, from each token's recorded launch time."
-          data={series}
-          format={(v) => Math.round(v).toString()}
-          integer
-        />
+      {/* Seconde rangée : ce que les journaux disent, et non l'état. Elle a
+          longtemps affiché trois zéros faute d'indexeur ; ils sont maintenant
+          relus swap par swap, dans chaque pool du registre. */}
+      <div className="rounded-2xl border bg-card p-5 sm:p-6">
+        <div className="grid gap-6 sm:grid-cols-3 sm:divide-x sm:divide-border">
+          {[
+            ["24h volume", traded((a) => formatEth(a.volume24h))],
+            ["Total volume", traded((a) => formatEth(a.volumeTotal))],
+            [
+              "Trades",
+              traded((a) => `${a.trades.toLocaleString("en-US")} (${a.trades24h} in 24h)`),
+            ],
+          ].map(([label, value]) => (
+            <div key={label} className="sm:not-first:pl-6 sm:not-last:pr-6">
+              <p className="text-sm text-muted-foreground">{label}</p>
+              <p className="mt-1 text-3xl font-medium tracking-tight tabular-nums">
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
 
-        {/* La seconde moitié de la grille portait un volume quotidien inventé.
-            Ce qui la remplit maintenant est la raison pour laquelle elle est
-            vide : nommer ce qui manque vaut mieux que tracer un zéro. */}
-        <section className="flex flex-col justify-center gap-3 rounded-2xl border border-dashed bg-card/40 p-5">
-          <h3 className="font-medium">Volume, trades and holders</h3>
-          <p className="text-sm text-muted-foreground">
-            These are not on this page because a node cannot answer them. A swap
-            leaves a log, not a balance: totalling volume, counting trades or
-            listing holders means replaying every event the pools have ever
-            emitted, and keeping that tally somewhere.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            That is an indexer, and Reveal does not run one yet. Until it does,
-            these charts would be guesses — so they are absent rather than
-            approximate.
-          </p>
-        </section>
+        <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
+          {activity.error
+            ? `The swap history could not be read — this is not zero activity. ${activity.error}`
+            : activity.loading
+              ? "Replaying every pool's swaps…"
+              : `Replayed from the Swap logs of ${
+                  activity.data?.pools === 1 ? "1 pool" : `${activity.data?.pools ?? 0} pools`
+                }, cached for a minute.`}
+        </p>
       </div>
+
+      <BarChart
+        title="Token launches"
+        subtitle="Per day, from each token's recorded launch time."
+        data={series}
+        format={(v) => Math.round(v).toString()}
+        integer
+      />
     </div>
   );
 }

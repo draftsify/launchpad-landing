@@ -4,10 +4,12 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
+import type { TokenActivity } from "@/app/api/activity/route";
 import { formatAge, formatEth } from "@/lib/format";
 import { slugOf, type Launch } from "@/lib/onchain";
 import { CopyAddress } from "@/components/site/copy-address";
 import { TokenMark } from "@/components/site/token-mark";
+import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -23,16 +25,27 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 }
 
 /**
- * Une carte ne montre que ce que la chaîne rend.
+ * Une carte ne montre que ce qui a été lu.
  *
- * Elle portait avant une variation sur 24 h, un nombre de détenteurs et une
- * barre de supply restant à débloquer. Les trois demandent un indexeur : un
- * nœud ne connaît ni le prix d'hier, ni l'historique des transferts, ni
- * l'ensemble des positions. À la place, la liquidité — qui est le chiffre le
- * plus parlant ici, puisqu'elle part de zéro et ne vient que des acheteurs.
+ * Le volume et la variation viennent des journaux, relus en un appel pour toute
+ * la liste ; ils arrivent donc après le reste, et un tiret tient la place en
+ * attendant. Un zéro y ressemblerait mais dirait autre chose : « personne n'a
+ * échangé » au lieu de « pas encore lu ».
+ *
+ * La barre de supply restant à débloquer reste absente : elle demanderait
+ * l'état de toutes les positions ouvertes, que même les journaux ne donnent pas.
  */
-export function TokenCard({ launch, index = 0 }: { launch: Launch; index?: number }) {
+export function TokenCard({
+  launch,
+  activity,
+  index = 0,
+}: {
+  launch: Launch;
+  activity?: TokenActivity;
+  index?: number;
+}) {
   const reduce = useReducedMotion();
+  const change = activity?.change24h ?? null;
 
   return (
     <motion.article
@@ -76,11 +89,22 @@ export function TokenCard({ launch, index = 0 }: { launch: Launch; index?: numbe
             </div>
 
             <div>
-              <p className="text-3xl font-medium tracking-tight tabular-nums sm:text-4xl">
+              <p className="flex flex-wrap items-baseline gap-2 text-3xl font-medium tracking-tight tabular-nums sm:text-4xl">
                 {formatEth(launch.marketCapEth)}
+                {change !== null && (
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      change >= 0 ? "text-foreground" : "text-muted-foreground"
+                    )}
+                  >
+                    {change >= 0 ? "+" : ""}
+                    {change.toFixed(1)}%
+                  </span>
+                )}
               </p>
               <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
-                Market cap
+                Market cap{change !== null ? " · 24h" : ""}
               </p>
             </div>
           </div>
@@ -92,7 +116,10 @@ export function TokenCard({ launch, index = 0 }: { launch: Launch; index?: numbe
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
+          <Stat label="24h volume">
+            {activity ? formatEth(activity.volume24h) : "—"}
+          </Stat>
           <Stat label="Liquidity">{formatEth(launch.liquidityEth)}</Stat>
           <Stat label="Age">{formatAge(launch.launchedAt)}</Stat>
           <Stat label="Contract">
