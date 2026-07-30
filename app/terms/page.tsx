@@ -15,7 +15,7 @@ const SECTIONS = [
     title: "1. What Reveal is",
     body: [
       "Reveal is a set of smart contracts that apply the same selling rules to every token launched through it. The rules are fixed by the protocol, not by you. It does not custody funds, does not execute trades on your behalf, and does not decide who may sell.",
-      "Every rule that applies to a token — unlock duration, initial sellable share, drawdown thresholds, impact caps, anti-sniper settings — is fixed at creation and readable on chain before the first buy.",
+      "Every rule that applies to a token — unlock duration, initial sellable share, drawdown relief, anti-sniper settings — is fixed at creation and readable on chain before the first buy.",
     ],
   },
   {
@@ -31,7 +31,7 @@ const SECTIONS = [
     title: "3. Selling rules",
     body: [
       "Selling is limited, not prevented. At any moment the contract computes a maximum sellable amount from elapsed time, position size relative to liquidity, and the position's drawdown. A transaction exceeding that amount is rejected; the remainder stays available later.",
-      "Impact caps limit how much a single wallet can move a pool within a time window. These caps apply to unlocked positions as well.",
+      "Once a position is fully unlocked it is an ordinary ERC-20 balance: it can be sold, transferred, or split across wallets without restriction. Reveal meters the release of new purchases; it does not restrain unlocked holders.",
     ],
   },
   {

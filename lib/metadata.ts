@@ -15,6 +15,20 @@ export type TokenMetadata = {
  * ce qui reste modeste sur un L2 mais devient absurde au-delà.
  */
 export const MAX_IMAGE_BYTES = 8_192;
+
+/**
+ * Doit valoir `RevealToken.MAX_METADATA_BYTES`, à l'octet près.
+ *
+ * Le contrat refuse au-delà avec `StringTooLong`, et ce refus arrive après la
+ * signature — donc après que l'utilisateur a cru lancer. Vérifier ici lui rend
+ * un message avant.
+ *
+ * La marge est réelle : une vignette de 8 Ko plus la description et les liens
+ * font environ 12 Ko une fois le document encodé en base64, pour un plafond à
+ * 16 Ko. Un lancement complet coûte alors 18,1 M de gas, soit 0,00037 ETH sur
+ * Robinhood Chain.
+ */
+export const MAX_METADATA_BYTES = 16_384;
 const MAX_DIMENSION = 128;
 
 /**
@@ -63,7 +77,23 @@ export function toDataUri(meta: TokenMetadata) {
     const value = meta[key]?.trim();
     if (value) clean[key] = value;
   }
-  return `data:application/json,${encodeURIComponent(JSON.stringify(clean))}`;
+
+  /**
+   * Base64 plutôt que `encodeURIComponent`, et c'est une question de borne.
+   *
+   * Le document contient une vignette déjà encodée en base64 : la réencoder en
+   * pourcent-échappement fait exploser chaque `+`, `/` et `=` en trois octets,
+   * soit jusqu'à trois fois la taille, sans plafond prévisible. Le contrat
+   * refuse au-delà de `MAX_METADATA_BYTES`, donc une borne floue côté client
+   * se traduirait par des lancements qui échouent après signature.
+   *
+   * Base64 coûte exactement 4/3, quoi qu'il y ait dedans.
+   */
+  const json = JSON.stringify(clean);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:application/json;base64,${btoa(binary)}`;
 }
 
 /** Lit un `metadataURI` produit par `toDataUri`, ou une URL classique. */
@@ -72,9 +102,14 @@ export function parseMetadata(uri: string): TokenMetadata | null {
   try {
     const comma = uri.indexOf(",");
     const body = uri.slice(comma + 1);
-    return JSON.parse(
-      uri.slice(0, comma).includes(";base64") ? atob(body) : decodeURIComponent(body)
-    );
+    if (!uri.slice(0, comma).includes(";base64")) {
+      return JSON.parse(decodeURIComponent(body));
+    }
+    // `atob` rend une chaîne d'octets : la relire en UTF-8, sinon un accent
+    // dans la description ressort en mojibake.
+    const binary = atob(body);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }

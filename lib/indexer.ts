@@ -119,7 +119,7 @@ async function timestampsOf(blocks: bigint[]) {
 type SwapLog = Log<bigint, number, false, typeof SWAP>;
 
 const LAUNCHED = parseAbiItem(
-  "event Launched(address indexed token, address indexed creator, address pool, uint256 supply, int24 tickLower, int24 tickUpper, (uint16,uint32,uint16,uint32,uint32,uint32) rules)"
+  "event Launched(address indexed token, address indexed creator, address pool, uint256 tokenId, uint256 supply, uint128 liquidity, int24 tickLower, int24 tickUpper, (uint16,uint32,uint32,uint32) rules)"
 );
 
 /**

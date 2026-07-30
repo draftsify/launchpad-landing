@@ -12,6 +12,7 @@ import { PriceChart } from "@/components/site/price-chart";
 import { useActivity } from "@/components/site/use-activity";
 import { TokenMark } from "@/components/site/token-mark";
 import { TradePanel } from "@/components/site/trade-panel";
+import { GraduationCard } from "@/components/site/graduation-card";
 import { useLaunch } from "@/components/site/use-launches";
 import { useRules } from "@/components/site/use-rules";
 import { XIcon } from "@/components/x-icon";
@@ -243,7 +244,7 @@ export function TokenDetail({ slug }: { slug: string }) {
               {[
                 ["Sellable at launch", `${rules.initialUnlock}%`],
                 ["Fully unlocked after", `${rules.unlockHours}h`],
-                ["Impact cap", `${rules.impactCap}% / ${rules.impactWindow} min`],
+                ["Buy ramp", `${rules.buyRamp} min`],
                 ["Launch delay", `${rules.launchDelay}s`],
               ].map(([label, value]) => (
                 <div key={label} className="space-y-1">
@@ -273,7 +274,10 @@ export function TokenDetail({ slug }: { slug: string }) {
           </section>
         </div>
 
-        <TradePanel launch={launch} onDone={reload} />
+        <div className="space-y-4">
+          <TradePanel launch={launch} onDone={reload} />
+          <GraduationCard launch={launch} />
+        </div>
       </div>
     </Frame>
   );

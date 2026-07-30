@@ -21,15 +21,15 @@ const RULES = [
     body: "Drawdown raises the floor. A position down 40% is nearly fully liquid regardless of how recently it was bought.",
   },
   {
-    title: "Impact is capped per window",
-    body: "No position moves the pool beyond a set share within a window. The excess waits for the next one, it is never cancelled.",
+    title: "Graduation moves nothing",
+    body: "At 4.2 ETH a launch is called graduated. Same token, same pool, same locked liquidity — it is a milestone, not a migration, and not a promise.",
   },
 ];
 
 export const metadata: Metadata = {
   title: "How it works — Reveal",
   description:
-    "Progressive unlocking, loss protection and impact caps: the three rules that make price discovery work on Reveal.",
+    "Progressive unlocking, drawdown relief and an anti-sniper ramp: the rules that make price discovery work on Reveal.",
 };
 
 const STEPS = [

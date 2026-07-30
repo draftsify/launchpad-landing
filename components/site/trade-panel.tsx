@@ -48,7 +48,7 @@ const SLIPPAGE_BPS = 100n;
  * D'abord, Uniswap emballe les transferts : un refus de nos règles remonte en
  * « TF », jamais en `PositionLocked`. Lire l'échec après coup n'apprendrait donc
  * rien à l'utilisateur. Tout ce qui contraint la vente est lu *avant* —
- * `sellableNow` dit le montant exact qui passe, et c'est celui-là qu'on propose.
+ * `releasable` dit le montant exact qui passe, et c'est celui-là qu'on propose.
  *
  * Ensuite, le routeur enveloppe l'ETH lui-même quand l'entrée est le WETH et
  * qu'il reçoit de la valeur. Acheter ne demande donc aucune approbation ; seule
@@ -95,7 +95,7 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
         publicClient.readContract({
           address: launch.address,
           abi: tokenAbi,
-          functionName: "sellableNow",
+          functionName: "releasable",
           args: [holder],
         }),
         publicClient.readContract({
@@ -257,7 +257,7 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
         const fresh = await publicClient.readContract({
           address: launch.address,
           abi: tokenAbi,
-          functionName: "sellableNow",
+          functionName: "releasable",
           args: [from],
         });
         if (amountIn >= fresh) {

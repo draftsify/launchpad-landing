@@ -57,7 +57,7 @@ export const quoterAbi = parseAbi([
  * vraie transaction : pendant le délai anti-sniper, au-dessus de la rampe
  * d'achat, ou pour une vente supérieure au débloqué, il revert. Et comme
  * Uniswap remplace nos motifs par « TF », l'échec ne dit pas lequel — d'où
- * `null` plutôt qu'une erreur : c'est à l'appelant, qui a déjà lu `sellableNow`
+ * `null` plutôt qu'une erreur : c'est à l'appelant, qui a déjà lu `releasable`
  * et `launchedAt`, de dire pourquoi.
  */
 export async function quote(

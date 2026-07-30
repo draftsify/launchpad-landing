@@ -12,6 +12,8 @@ interface IUniswapV3Factory {
         external
         view
         returns (address pool);
+    /// Zéro si le palier n'existe pas — d'où la vérification au constructeur.
+    function feeAmountTickSpacing(uint24 fee) external view returns (int24);
 }
 
 interface IUniswapV3Pool {

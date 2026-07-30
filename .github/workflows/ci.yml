@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Un push qui en remplace un autre annule le précédent : rien à gagner à
+# vérifier un commit déjà dépassé.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Types
+        run: npx tsc --noEmit
+
+      # Le périmètre du linter exclut contracts/lib et contracts/out : ce sont
+      # des dépendances Foundry vendues telles quelles, et leurs 900
+      # avertissements noieraient les nôtres.
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      # Les avis de sécurité de production, et eux seuls : un outil de build
+      # vulnérable ne met pas les utilisateurs en danger.
+      - name: Production advisories
+        run: npm audit --omit=dev --audit-level=high
+
+  contracts:
+    name: Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build
+        run: forge build
+        working-directory: contracts
+
+      # Tout, y compris les invariants et la parité de courbe. Les tests de
+      # fork se sautent d'eux-mêmes si le nœud ne répond pas, plutôt que de
+      # rougir pour une raison étrangère au protocole.
+      - name: Test
+        run: forge test -vv
+        working-directory: contracts
+
+# Pas de `forge fmt --check` : le dépôt ne le satisfait pas aujourd'hui, et le
+# normaliser d'un coup noierait ce changement sous un reformatage de fichiers
+# qu'il ne touche pas. À faire dans un commit à part, avant d'ajouter la porte.

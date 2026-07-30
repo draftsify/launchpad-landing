@@ -1,7 +1,7 @@
 import { formatEther } from "viem";
 
 import { LAUNCHER_ADDRESS, isDeployed, publicClient } from "@/lib/chain";
-import { launcherAbi, tokenAbi } from "@/lib/launcher";
+import { launcherAbi, lockerAbi, tokenAbi } from "@/lib/launcher";
 import { parseMetadata, type TokenMetadata } from "@/lib/metadata";
 import type { Rules } from "@/lib/presets";
 import { erc20Abi, poolAbi, priceFromSqrt } from "@/lib/uniswap";
@@ -145,7 +145,7 @@ export async function readLaunches(): Promise<Launch[]> {
 export async function readRules(): Promise<Rules | null> {
   if (!isDeployed) return null;
 
-  const [initialUnlockBps, unlockSeconds, impactCapBps, impactWindow, launchDelay, buyRamp] =
+  const [initialUnlockBps, unlockSeconds, launchDelay, buyRamp] =
     await publicClient.readContract({
       address: LAUNCHER_ADDRESS as `0x${string}`,
       abi: launcherAbi,
@@ -155,8 +155,6 @@ export async function readRules(): Promise<Rules | null> {
   return {
     initialUnlock: initialUnlockBps / 100,
     unlockHours: unlockSeconds / 3600,
-    impactCap: impactCapBps / 100,
-    impactWindow: impactWindow / 60,
     launchDelay,
     buyRamp: buyRamp / 60,
   };
@@ -165,4 +163,62 @@ export async function readRules(): Promise<Rules | null> {
 export async function readLaunchBySlug(slug: string): Promise<Launch | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(slug)) return null;
   return readLaunch(slug.toLowerCase() as `0x${string}`);
+}
+
+/** Ce que le locker dit d'un lancement : jalon, et propriété de la position. */
+export type Graduation = {
+  /** Quote réellement détenue par la position verrouillée, en ETH. */
+  progress: number;
+  /** Seuil, en ETH. */
+  threshold: number;
+  /** Jalon enregistré sur la chaîne. Collant : il ne se dé-franchit pas. */
+  graduated: boolean;
+  /** Vrai dès que le seuil est atteint, même si personne ne l'a encore acté. */
+  reached: boolean;
+};
+
+/**
+ * Lit la graduation d'un token.
+ *
+ * `progress` ne vient pas du solde WETH du pool mais de la quote que la
+ * position verrouillée contient au prix courant. Un virement direct au pool ne
+ * la bouge donc pas — c'est ce qui sépare un jalon d'un chiffre qu'on s'offre.
+ */
+export async function readGraduation(
+  token: `0x${string}`
+): Promise<Graduation | null> {
+  if (!isDeployed) return null;
+
+  const locker = await publicClient.readContract({
+    address: LAUNCHER_ADDRESS as `0x${string}`,
+    abi: launcherAbi,
+    functionName: "locker",
+  });
+
+  const [progress, graduated, threshold] = await Promise.all([
+    publicClient.readContract({
+      address: locker,
+      abi: lockerAbi,
+      functionName: "graduationProgress",
+      args: [token],
+    }),
+    publicClient.readContract({
+      address: locker,
+      abi: lockerAbi,
+      functionName: "graduated",
+      args: [token],
+    }),
+    publicClient.readContract({
+      address: locker,
+      abi: lockerAbi,
+      functionName: "GRADUATION_QUOTE",
+    }),
+  ]);
+
+  return {
+    progress: Number(formatEther(progress)),
+    threshold: Number(formatEther(threshold)),
+    graduated,
+    reached: progress >= threshold,
+  };
 }
