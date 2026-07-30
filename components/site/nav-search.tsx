@@ -139,7 +139,12 @@ export function NavSearch() {
               </>
             ) : (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                No token matches “{query}”.
+                {/* Sans requête, rien n'a été cherché : dire « aucune
+                    correspondance » ferait porter au visiteur un vide qui
+                    n'est pas le sien. */}
+                {query.trim()
+                  ? `No token matches “${query.trim()}”.`
+                  : "No token has launched yet."}
               </p>
             )}
 

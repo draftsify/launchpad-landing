@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { XIcon } from "@/components/x-icon";
 import { CopyAddress } from "@/components/site/copy-address";
-import { MarketCapChart } from "@/components/site/market-cap-chart";
 import { TokenMark } from "@/components/site/token-mark";
 import { TokenPosition } from "@/components/site/token-position";
+import { RULES } from "@/lib/presets";
 import { TOKENS, getToken } from "@/lib/tokens";
 
 export function generateStaticParams() {
@@ -126,14 +126,11 @@ export default async function TokenPage({
           </div>
         </header>
 
-        {/* La capitalisation n'est pas répétée ici : c'est le titre du graphe
-            ci-dessous, et deux fois le même nombre sous deux étiquettes se lit
-            comme deux mesures différentes. */}
         <div className="mt-8 grid divide-y rounded-2xl border sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
           {[
+            ["Market cap", token.marketCap],
             ["Holders", token.holders],
             ["Liquidity", token.liquidity],
-            ["Supply", token.supply],
             ["Age", token.age],
           ].map(([label, value]) => (
             <div key={label} className="space-y-1 px-4 py-3 sm:px-5">
@@ -146,8 +143,17 @@ export default async function TokenPage({
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,340px)]">
-          <MarketCapChart source={token.chart} />
-          <TokenPosition ticker={token.ticker} rules={token.rules} />
+          {/* Un nœud répond l'état présent, pas le prix d'hier : un historique
+              demande un indexeur qui enregistre chaque swap. Tant qu'il n'existe
+              pas, on le dit — une courbe reconstituée serait une invention. */}
+          <section className="flex min-h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed bg-card/40 p-6 text-center">
+            <p className="font-medium">Price history isn&apos;t indexed yet</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              A node answers the current price, not yesterday&apos;s. Charting
+              needs an indexer recording every swap — it isn&apos;t running.
+            </p>
+          </section>
+          <TokenPosition ticker={token.ticker} />
         </div>
 
         {/* Les règles de ce token précisément : c'est ce qu'un explorateur
@@ -157,8 +163,8 @@ export default async function TokenPage({
             <div className="space-y-1">
               <h2 className="font-medium">Launch rules</h2>
               <p className="text-sm text-muted-foreground">
-                Written into the contract before the first buy. They cannot be
-                changed.
+                Written into the contract before the first buy, identical for
+                every launch. Nobody can change them.
               </p>
             </div>
             <Button variant="card" size="sm" asChild>
@@ -168,13 +174,10 @@ export default async function TokenPage({
 
           <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              ["Sellable at launch", `${token.rules.initialUnlock}%`],
-              ["Fully unlocked after", `${token.rules.unlockHours}h`],
-              [
-                "Impact cap",
-                `${token.rules.impactCap}% / ${token.rules.impactWindow} min`,
-              ],
-              ["Launch delay", `${token.rules.launchDelay}s`],
+              ["Sellable at launch", `${RULES.initialUnlock}%`],
+              ["Fully unlocked after", `${RULES.unlockHours}h`],
+              ["Impact cap", `${RULES.impactCap}% / ${RULES.impactWindow} min`],
+              ["Launch delay", `${RULES.launchDelay}s`],
             ].map(([label, value]) => (
               <div key={label} className="space-y-1">
                 <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">

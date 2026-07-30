@@ -15,7 +15,7 @@ contract RevealGatesTest is RevealBase {
         vm.expectRevert(bytes("TF"));
         router.swap(address(pool), alice, !tokenFirst, int256(uint256(0.01 ether)));
 
-        _warp(31);
+        _warp(6);
         _buy(alice, 0.01 ether);
         assertGt(token.balanceOf(alice), 0, "l'achat passe le delai ecoule");
     }
@@ -26,7 +26,7 @@ contract RevealGatesTest is RevealBase {
      * un pourcentage de sa reserve n'aurait rien freine.
      */
     function test_BuyRampCapsTheFirstBuys() public {
-        _warp(31);
+        _warp(6);
 
         // Au debut de la rampe, un achat est borne a 0,25 % de la supply.
         uint256 maxBuy = (token.totalSupply() * 25) / 10_000;

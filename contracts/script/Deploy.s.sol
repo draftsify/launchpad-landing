@@ -56,7 +56,7 @@ contract Deploy is Script, StdCheats {
             unlockSeconds: 1 hours,
             impactCapBps: 1_000,
             impactWindow: 5 minutes,
-            launchDelay: 30,
+            launchDelay: 5,
             buyRamp: 10 minutes
         });
     }

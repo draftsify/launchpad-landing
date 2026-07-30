@@ -26,7 +26,7 @@ export const RULES: Rules = {
   unlockHours: 1,
   impactCap: 10,
   impactWindow: 5,
-  launchDelay: 30,
+  launchDelay: 5,
   buyRamp: 10,
 };
 

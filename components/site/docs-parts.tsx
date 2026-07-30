@@ -79,11 +79,14 @@ export function ParamTable({ params }: { params: Param[] }) {
             <th scope="col" className="px-4 py-2.5 font-medium">
               Type
             </th>
+            {/* « Default » laissait entendre qu'on peut y déroger : la valeur
+                est la même pour tout lancement, et la borne dit seulement ce
+                que le validateur accepte. */}
             <th scope="col" className="px-4 py-2.5 font-medium">
-              Range
+              Enforced bound
             </th>
             <th scope="col" className="px-4 py-2.5 font-medium">
-              Default
+              Value
             </th>
           </tr>
         </thead>
@@ -100,10 +103,10 @@ export function ParamTable({ params }: { params: Param[] }) {
                 {param.type}
               </td>
               <td className="px-4 py-3 align-top font-mono text-xs text-muted-foreground">
-                {param.range}
+                {param.bound}
               </td>
-              <td className="px-4 py-3 align-top font-mono text-xs tabular-nums text-muted-foreground">
-                {param.fallback}
+              <td className="px-4 py-3 align-top font-mono text-xs tabular-nums text-foreground">
+                {param.value}
               </td>
             </tr>
           ))}

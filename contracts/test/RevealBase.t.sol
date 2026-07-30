@@ -58,7 +58,7 @@ abstract contract RevealBase is Test {
             unlockSeconds: 1 hours,
             impactCapBps: 1_000, // 10 % de la réserve de quote
             impactWindow: 5 minutes,
-            launchDelay: 30,
+            launchDelay: 5,
             buyRamp: 10 minutes
         });
     }

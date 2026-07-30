@@ -11,7 +11,17 @@ const LEFT: Slug[] = [
   "wallet-rainbow",
   "wallet-ledger",
 ];
-const RIGHT: Slug[] = ["uniswap", "ethereum", "phantom", "solflare"];
+/**
+ * EVM uniquement. Phantom et Solflare figuraient ici : ce sont des wallets
+ * Solana, et Robinhood Chain est une chaîne Ethereum — les afficher promettait
+ * une compatibilité qui n'existe pas.
+ */
+const RIGHT: Slug[] = [
+  "uniswap",
+  "ethereum",
+  "wallet-wallet-connect",
+  "wallet-zerion",
+];
 
 function Tile({ slug, size = 22 }: { slug: Slug; size?: number }) {
   return (

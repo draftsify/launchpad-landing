@@ -5,11 +5,14 @@ import { LOGO_RATIOS } from "@/lib/logo-ratios";
 
 const LOGO_HEIGHT = 20;
 
+// Ce sur quoi le protocole repose réellement : un pool Uniswap V3 sur une
+// chaîne Ethereum, atteint par des wallets EVM. Phantom et Solflare étaient là
+// et n'y avaient rien à faire — Solana n'exécute pas ces contrats.
 const PROTOCOLS = [
   { name: "Uniswap", slug: "uniswap" },
-  { name: "Phantom", slug: "phantom" },
   { name: "Ethereum", slug: "ethereum" },
-  { name: "Solflare", slug: "solflare" },
+  { name: "MetaMask", slug: "wallet-metamask" },
+  { name: "Rabby", slug: "wallet-rabby" },
 ] satisfies ReadonlyArray<{ name: string; slug: keyof typeof LOGO_RATIOS }>;
 
 /**

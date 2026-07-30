@@ -32,6 +32,31 @@ export function TokenBrowser({ tokens }: { tokens: Token[] }) {
   const active = SORTS.find((s) => s.id === sort)!;
   const searching = query.trim().length > 0;
 
+  // Aucun token déployé : trier et filtrer le vide n'apprend rien, et des
+  // onglets inertes se lisent comme une panne. On dit l'état réel à la place.
+  if (tokens.length === 0) {
+    return (
+      <div className="mt-8 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-20 text-center">
+        <span className="flex size-11 items-center justify-center rounded-full border bg-card">
+          <Coins className="size-5 text-muted-foreground" />
+        </span>
+        <div className="space-y-1">
+          <p className="font-medium">No token has launched yet</p>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+            This list reads the launcher contract. It stays empty until the
+            first launch — yours can be it.
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/create">
+            Launch a token
+            <ArrowRight />
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -22,7 +22,7 @@ const RULES = [
   },
   {
     title: "Impact is capped per window",
-    body: "No wallet moves the pool beyond a set share within a window. The excess waits for the next one, it is never cancelled.",
+    body: "No position moves the pool beyond a set share within a window. The excess waits for the next one, it is never cancelled.",
   },
 ];
 
@@ -34,12 +34,12 @@ export const metadata: Metadata = {
 
 const STEPS = [
   {
-    title: "Configure",
-    body: "Set unlock duration, initial sellable share, drawdown thresholds, impact caps and anti-sniper rules.",
+    title: "Describe",
+    body: "A name, a symbol, an image and your links. The rules are not yours to set — they are the same for every launch, and that is what makes two tokens comparable.",
   },
   {
     title: "Launch",
-    body: "The token deploys with those rules written into the contract. They are public before the first buy.",
+    body: "One transaction deploys the token, opens its pool and arms the rules. Nobody puts up capital: the whole supply sits on one side of the range, so the buyers' ETH becomes the liquidity. You pay gas.",
   },
   {
     title: "Discover",
@@ -91,11 +91,12 @@ export default function HowItWorksPage() {
         <div className="grid gap-8 lg:grid-cols-[minmax(0,320px)_1fr]">
           <div className="space-y-3">
             <h2 className="text-2xl font-medium tracking-tight sm:text-3xl">
-              From configuration to exit
+              From launch to exit
             </h2>
             <p className="text-sm text-muted-foreground">
               Everything after launch is automatic. No team decides who gets to
-              sell.
+              sell — there is no admin, no pause and no whitelist anywhere in the
+              contracts.
             </p>
           </div>
 
@@ -132,7 +133,7 @@ export default function HowItWorksPage() {
           Ready to launch on these rules?
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Every parameter is yours to set at creation.
+          The same rules for every token, yours included. You pay gas.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button asChild>

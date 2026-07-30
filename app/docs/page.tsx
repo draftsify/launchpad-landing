@@ -46,7 +46,7 @@ export default function DocsPage() {
                 <BlurWords text="Docs" delay={0.05} />
               </h1>
               <p className="text-sm text-muted-foreground">
-                How the protocol behaves, and every knob you can turn.
+                How the protocol behaves, and why each rule is set where it is.
               </p>
             </div>
             <DocsNav />
@@ -69,8 +69,14 @@ export default function DocsPage() {
               <Prose>
                 Three rules do the work: a time-based unlock, relief that
                 accelerates when a position is underwater, and a cap on how much
-                any single wallet can move the pool within a window. Everything
-                else is configuration.
+                any single position can move the pool within a window.
+              </Prose>
+              <Prose>
+                None of them is a setting. The creator picks a name, a symbol
+                and an image; the rules, the supply and the tick range live in
+                the launcher, identical for every launch. Letting each creator
+                choose how much they are constrained is not a constraint, and it
+                makes two tokens incomparable.
               </Prose>
               <Callout title="What this is not">
                 Reveal reduces the damage a handful of wallets can do to a fresh
@@ -84,30 +90,29 @@ export default function DocsPage() {
               title="Quickstart"
               lede="A launch is a single transaction against the factory."
             >
-              <Code>{`import { createToken } from "@reveal/sdk";
-
-// Supply and liquidity are not yours to set. Supply is fixed by the
-// launcher, and the pool is seeded one-sided with it -- buyers' ETH
-// becomes the liquidity. You pay gas.
-const token = await createToken({
-  name: "Reveal",
-  symbol: "REVEAL",
-  metadataURI: "ipfs://...",  // image, description, links
-
-  rules: {
-    initialUnlock: 1000,      // 10% sellable from block one
-    unlockDuration: 86_400,   // fully unlocked after 24h
-    impactCap: 1000,          // 10% of the quote reserve...
-    impactWindow: 300,        // ...per 5 minute window
-    launchDelay: 30,          // no buys for the first 30s
-    buyRamp: 600,             // buy size opens up over 10 minutes
-  },
-});`}</Code>
+              <Code>{`// Three strings. That is the whole surface.
+//
+// Supply, rules and the tick range are not arguments -- they live in the
+// launcher, identical for every launch, with no function to change them.
+// Nobody funds the pool either: the supply is placed one-sided, so the
+// buyers' ETH becomes the liquidity. The creator pays gas and nothing else.
+function launch(
+    string calldata name,
+    string calldata symbol,
+    string calldata metadataURI   // image, description, links
+) external returns (address token, address pool);`}</Code>
               <Prose>
-                Every field in <Inline>rules</Inline> is optional and falls back
-                to the defaults listed under Parameters. Omitting a field is a
-                choice like any other — the resulting values are public before
-                the first buy either way.
+                One transaction deploys the token, creates its pool, seeds it,
+                and arms the rules. There is never a moment where the token
+                exists without its pool — so no window in which someone opens a
+                competing pool or buys before the gates are live.
+              </Prose>
+              <Prose>
+                <Inline>metadataURI</Inline> is written once and has no setter.
+                This interface writes the whole thing as a{" "}
+                <Inline>data:</Inline> URI, image included, so a token displays
+                from chain state alone — no IPFS pin, no server, nothing to keep
+                paying for.
               </Prose>
               <div className="flex flex-wrap gap-3 pt-1">
                 <Button asChild size="sm">
@@ -152,7 +157,7 @@ const token = await createToken({
                   {
                     term: "5 · Steady state",
                     description:
-                      "Once every position has passed unlockDuration, only the impact cap remains active.",
+                      "Once every position has passed unlockSeconds, only the impact cap remains active.",
                   },
                 ]}
               />
@@ -192,13 +197,14 @@ const token = await createToken({
               title="Computing the sellable amount"
               lede="Three inputs, then a cap."
             >
-              <Code>{`releasable(position) =
+              <Code>{`releasable(holder) =
     basisAmount
-  * max( timeUnlock(elapsed, duration),
-         reliefUnlock(ticksBelowEntry) )
+  * max( timeUnlockedBps(now - entryTime),
+         reliefBps(drawdownTicks(holder)) )
+  / 10_000
   - releasedTotal
 
-executable = min( releasable, remainingWindowAllowance(wallet) )`}</Code>
+sellableNow(holder) = min( releasable(holder), windowRemaining(holder) )`}</Code>
               <Prose>
                 Relief is a floor, not an addition. A position deep in drawdown
                 never unlocks <em>less</em> than its schedule already permits,
@@ -206,9 +212,10 @@ executable = min( releasable, remainingWindowAllowance(wallet) )`}</Code>
               </Prose>
               <Callout title="Rejections are partial by nature" tone="warning">
                 A sell above the limit reverts with{" "}
-                <Inline>ExceedsSellable</Inline> and returns the amount that
-                would have succeeded. Interfaces should offer that amount rather
-                than showing a bare failure.
+                <Inline>PositionLocked</Inline> or{" "}
+                <Inline>ImpactCapExceeded</Inline>, each returning the amount
+                that would have succeeded. Uniswap swallows both — read{" "}
+                <Inline>sellableNow</Inline> first and offer that amount.
               </Callout>
             </DocSection>
 
@@ -225,19 +232,24 @@ executable = min( releasable, remainingWindowAllowance(wallet) )`}</Code>
               <DefList
                 items={[
                   {
-                    term: "Whitelisted pools",
+                    term: "The pool",
                     description:
-                      "Pools created by the factory are known to the token. Transfers into them are treated as sells and metered.",
+                      "One address, written at launch and never changed. Tokens leaving toward it are a sell: both the unlock budget and the impact window apply.",
                   },
                   {
                     term: "Wallet to wallet",
                     description:
-                      "Transfers to an unknown address consume sellable amount exactly as a sale would, so splitting a position does not reset its schedule.",
+                      "Consumes the unlock budget exactly as a sale would, so splitting a position across ten addresses does not reset its schedule. The impact cap does not apply — no price moved.",
                   },
                   {
-                    term: "Contracts",
+                    term: "Nothing is blocked outright",
                     description:
-                      "Transfers to unrecognised contracts revert with UnknownDestination until the destination is registered.",
+                      "There is no whitelist, no blocked destination, no pause and no admin. A transfer either fits inside what the position may release, or it reverts — and the receiving address opens a position of its own.",
+                  },
+                  {
+                    term: "Protocol fees",
+                    description:
+                      "Fees moving from the pool to the treasury are not counted as a buy, since no quote enters — counting them would inflate the impact cap's reference. They do open a position, so the protocol is bound by its own selling rules.",
                   },
                 ]}
               />
@@ -256,14 +268,26 @@ executable = min( releasable, remainingWindowAllowance(wallet) )`}</Code>
               </Prose>
               <Code>{`// 5 minute TWAP, read from the pool's own tick accumulator.
 // Ticks, not prices: 1.0001^n is not worth computing on chain.
-int24  reference = twapTick();          // reverts -> no relief at all
-uint256 drop     = ticksBelow(basisTick, reference);
-uint256 relief   = drop * 10_000 / 6_932;   // 6932 ticks = a halving`}</Code>
+(int24 reference, bool fresh) = twapTick();  // !fresh -> no relief at all
+uint256 drop   = ticksBelow(basisTick, reference);
+uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
+              <Prose>
+                Entry price is the opposite: recorded at spot, not TWAP. The
+                average lags by minutes, so during a fast climb a buyer would be
+                credited a price far below what they actually paid, would look
+                permanently in profit, and would never receive the relief their
+                real loss entitles them to.
+              </Prose>
+              <Prose>
+                Spot is safe in that direction. Inflating it to manufacture
+                future relief means buying at the inflated price yourself — the
+                loss is then real, and the relief earned.
+              </Prose>
               <Prose>
                 A longer window costs responsiveness during a genuine crash; a
-                shorter one lowers the cost of manipulating relief. Thirty
-                minutes is the current default and is expected to move before
-                audit.
+                shorter one lowers the cost of manipulating relief. Five minutes
+                is a constant in the token, not a parameter, and is expected to
+                be revisited before audit.
               </Prose>
             </DocSection>
 
@@ -287,28 +311,35 @@ uint256 relief   = drop * 10_000 / 6_932;   // 6932 ticks = a halving`}</Code>
             <DocSection
               id="relief"
               title="Drawdown relief"
-              lede="Tiers that raise the floor when a position is underwater."
+              lede="A floor that rises continuously as a position goes under water."
             >
               <ParamTable params={RELIEF_PARAMS} />
-              <Callout title="Keep the top tier high">
-                A holder who is down 40% and still cannot exit will describe
-                your launchpad as a trap, and they will be right. The default
-                top tier releases 95%.
+              <Callout title="No tiers, and no trap at the bottom">
+                Relief is a straight ratio of the drop, not a set of steps: down
+                10% releases roughly 15%, and a halved price releases
+                everything. A holder deep in loss who still cannot exit would
+                call this a trap, and they would be right — so that case is the
+                one the curve is built around.
               </Callout>
             </DocSection>
 
             <DocSection
               id="impact"
               title="Impact caps"
-              lede="A ceiling on how much one wallet can move the pool at once."
+              lede="A ceiling on how much one position can move the pool at once."
             >
               <ParamTable params={IMPACT_PARAMS} />
               <Prose>
-                The cap applies to unlocked positions too. It is measured on a
-                rolling window per wallet, so a refused remainder becomes
-                available again as the window slides rather than at a fixed
-                reset.
+                The cap applies to fully unlocked positions too. It is measured
+                on a rolling window, so a refused remainder becomes available
+                again as the window slides rather than at a fixed reset.
               </Prose>
+              <Callout title="Nothing sells before something buys">
+                The cap is a share of the pool&apos;s quote reserve, and that
+                reserve starts at zero. Until someone buys, the cap is zero and
+                no sell can pass. This falls out of one-sided liquidity rather
+                than being a rule of its own.
+              </Callout>
             </DocSection>
 
             <DocSection
@@ -331,19 +362,35 @@ uint256 relief   = drop * 10_000 / 6_932;   // 6932 ticks = a halving`}</Code>
               lede="The surface an integration needs."
             >
               <Code>{`interface IRevealToken {
-    function sellableOf(uint256 id) external view returns (uint256);
-    function positionsOf(address owner)
-        external view returns (uint256[] memory);
-    function windowAllowance(address wallet)
-        external view returns (uint256 remaining, uint64 resetsAt);
+    // What a sell would execute right now: the binding one of the two.
+    function sellableNow(address holder) external view returns (uint256);
+
+    // The two limits, separately, when you need to explain which one bit.
+    function releasable(address holder) external view returns (uint256);
+    function windowRemaining(address holder) external view returns (uint256);
+
+    // How open the position is, and how far under water.
+    function unlockedBps(address holder) external view returns (uint256);
+    function drawdownTicks(address holder) external view returns (uint256);
+    function twapTick() external view returns (int24 tick, bool fresh);
+
     function rules() external view returns (Rules memory);
+    function metadataURI() external view returns (string memory);
 }`}</Code>
               <Prose>
-                <Inline>sellableOf</Inline> is the call a front end should make
-                before enabling a sell button. It already accounts for time,
-                size, relief and prior sales — but not for the wallet&apos;s window
-                allowance, which <Inline>windowAllowance</Inline> returns
-                separately.
+                <Inline>sellableNow</Inline> is the call a front end must make
+                before enabling a sell button — and it is not optional. Uniswap
+                wraps token transfers in its own <Inline>_safeTransfer</Inline>,
+                so a rejected sell surfaces as the pool&apos;s{" "}
+                <Inline>TF</Inline>, never as our custom error. Reading the
+                failure afterwards tells the user nothing; reading the view
+                beforehand tells them the exact amount that works.
+              </Prose>
+              <Prose>
+                <Inline>fresh</Inline> is false while the pool has no oracle
+                history to average. Relief returns zero in that state rather
+                than falling back to spot, because spot relief would pay anyone
+                who crashes the price for a single block.
               </Prose>
             </DocSection>
 
@@ -376,19 +423,24 @@ uint256 relief   = drop * 10_000 / 6_932;   // 6932 ticks = a halving`}</Code>
             <DocSection
               id="fees"
               title="Fees"
-              lede="Charged at launch and on trades routed through the protocol."
+              lede="Nothing at launch, and the pool's own fee tier on trades."
             >
               <DefList
                 items={[
                   {
                     term: "Launch cost",
                     description:
-                      "Gas only. The protocol treasury seeds the pool and the LP tokens are burned, so the liquidity is neither the creator's to fund nor anyone's to withdraw.",
+                      "Gas only. Nobody advances capital — not the creator, not the protocol. The whole supply is placed on one side of a tick range, so the pool starts with zero quote and the buyers' ETH becomes the liquidity.",
+                  },
+                  {
+                    term: "Liquidity",
+                    description:
+                      "The position belongs to RevealFees, which exposes nothing but burn(lower, upper, 0). Zero is hardcoded, not a parameter: it materialises accrued fees without withdrawing any liquidity. Locked as firmly as a dead address, minus the stranded fees.",
                   },
                   {
                     term: "Trade fee",
                     description:
-                      "A share of each swap routed through a protocol pool, split between the pool and the treasury.",
+                      "The Uniswap V3 fee tier of the pool, accruing to that locked position. collect(token) is permissionless and sends only to the treasury written at deployment — anyone can trigger it, nobody can redirect it, and the contract never holds funds between calls.",
                   },
                   {
                     term: "No sell penalty",
@@ -408,15 +460,19 @@ uint256 relief   = drop * 10_000 / 6_932;   // 6932 ticks = a halving`}</Code>
             >
               <Prose>
                 Positions are the unit of state worth indexing. Track{" "}
-                <Inline>PositionOpened</Inline> and{" "}
-                <Inline>PositionReduced</Inline>, then recompute sellable
-                amounts client-side rather than storing them — they change with
+                <Inline>Entry</Inline> and <Inline>Exit</Inline>, then recompute
+                sellable amounts rather than storing them — they change with
                 every block through elapsed time and price.
               </Prose>
-              <Code>{`// derived, never stored
-const sellable = positions
-  .map(p => sellableAt(p, now, twap))
-  .reduce((a, b) => a + b, 0n);`}</Code>
+              <Code>{`// derived, never stored -- or just ask the contract
+const sellable = await token.read.sellableNow([holder]);`}</Code>
+              <Prose>
+                An indexer is not required to display a token: name, symbol and{" "}
+                <Inline>metadataURI</Inline> are all readable from a plain RPC
+                node. It is required for anything historical — yesterday&apos;s
+                price, a holder count, a volume chart. A node answers the
+                present only.
+              </Prose>
             </DocSection>
 
             <DocSection
@@ -429,7 +485,7 @@ const sellable = positions
                   {
                     term: "Multi-wallet splitting",
                     description:
-                      "Buying through many wallets sidesteps per-position sizing and per-wallet windows. The aim is to make that costly and visible, not impossible — any real fix would require identity, which this protocol will not do.",
+                      "Buying through many wallets sidesteps per-position sizing and per-position windows. The aim is to make that costly and visible, not impossible — any real fix would require identity, which this protocol will not do.",
                   },
                   {
                     term: "MEV",
@@ -444,7 +500,12 @@ const sellable = positions
                   {
                     term: "Immutability cuts both ways",
                     description:
-                      "Parameters cannot be fixed after deployment. A misconfigured launch stays misconfigured.",
+                      "Nothing can be fixed after deployment, and since the rules are shared, a badly chosen value applies to every launch rather than one. Correcting it means deploying a new launcher; the tokens already out keep the old rules forever.",
+                  },
+                  {
+                    term: "Errors do not survive the pool",
+                    description:
+                      "Uniswap wraps transfers, so a refused sell reaches the user as TF, not as PositionLocked. Any interface that skips the sellableNow view will show its users a failure it cannot explain.",
                   },
                 ]}
               />

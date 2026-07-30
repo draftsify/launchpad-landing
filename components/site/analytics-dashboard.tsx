@@ -22,7 +22,7 @@ export function AnalyticsDashboard() {
   const [range, setRange] = useState<Range>("24h");
   const stats = getStats(range);
   const [hero, ...rest] = stats;
-
+  const empty = SERIES.volume.length === 0 && SERIES.launches.length === 0;
 
   return (
     <div className="space-y-4">
@@ -51,9 +51,6 @@ export function AnalyticsDashboard() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Latest complete day Jul 28 UTC
-        </p>
       </div>
 
       <div className="rounded-2xl border bg-card p-5 sm:p-6">
@@ -92,26 +89,38 @@ export function AnalyticsDashboard() {
         </div>
 
         <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
-          Sample figures while the indexer is being built. They do not yet
-          reflect on-chain activity.
+          Zero because nothing has launched yet — not a placeholder.
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <BarChart
-          title="Trading volume"
-          subtitle="Daily context, latest complete day highlighted."
-          data={SERIES.volume}
-          format={formatUsd}
-        />
-        <BarChart
-          title="Token launches"
-          subtitle="Daily context, latest complete day highlighted."
-          data={SERIES.launches}
-          format={(v) => formatCount(Math.round(v))}
-          integer
-        />
-      </div>
+      {/* Une série vide ne se trace pas. Plutôt qu'un cadre d'axes sans
+          barres, on nomme ce qui manque : un indexeur, pas des données. */}
+      {empty ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed bg-card/40 px-6 py-16 text-center">
+          <p className="font-medium">Nothing to chart yet</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Daily volume and launch counts are history, and a node only answers
+            the present. These charts fill in once tokens launch and an indexer
+            records the swaps.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <BarChart
+            title="Trading volume"
+            subtitle="Daily context, latest complete day highlighted."
+            data={SERIES.volume}
+            format={formatUsd}
+          />
+          <BarChart
+            title="Token launches"
+            subtitle="Daily context, latest complete day highlighted."
+            data={SERIES.launches}
+            format={(v) => formatCount(Math.round(v))}
+            integer
+          />
+        </div>
+      )}
     </div>
   );
 }

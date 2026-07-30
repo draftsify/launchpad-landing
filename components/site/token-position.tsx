@@ -6,7 +6,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
-import type { TokenRules } from "@/lib/tokens";
+import { RULES } from "@/lib/presets";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -33,13 +33,7 @@ const ZONES = [
  * montre donc l'exemple explicitement étiqueté, dans les deux états, plutôt
  * que d'inventer des chiffres présentés comme ceux du wallet.
  */
-export function TokenPosition({
-  ticker,
-  rules,
-}: {
-  ticker: string;
-  rules: TokenRules;
-}) {
+export function TokenPosition({ ticker }: { ticker: string }) {
   const { account } = useWallet();
   const reduce = useReducedMotion();
 
@@ -92,7 +86,7 @@ export function TokenPosition({
         {account ? (
           <p className="text-xs text-muted-foreground">
             No ${ticker} position found for this wallet. Selling is capped at{" "}
-            {rules.impactCap}% of liquidity per {rules.impactWindow} minutes.
+            {RULES.impactCap}% of liquidity per {RULES.impactWindow} minutes.
           </p>
         ) : (
           <WalletDialog>
