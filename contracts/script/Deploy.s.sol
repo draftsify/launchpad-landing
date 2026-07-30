@@ -31,17 +31,21 @@ contract Deploy is Script, StdCheats {
     address constant RH_WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
 
     /**
-     * Destinataire des frais de swap sur Robinhood Chain.
+     * Destinataire des frais de swap sur Robinhood Chain. Délibérément vide.
      *
-     * Écrit ici, et non tapé au moment du déploiement, pour une raison précise :
-     * `RevealFees` prend cette adresse dans son constructeur et n'expose rien
-     * pour la changer. Une faute de frappe sur une ligne de commande enverrait
-     * tous les frais, définitivement, vers une adresse dont personne n'a la clé.
-     * Dans le dépôt, elle est relue, comparée et versionnée avant d'être gravée.
+     * Une adresse a occupé cette ligne — 0x12fedA39… — puis en a été retirée :
+     * sa clé privée avait été collée dans une conversation, donc elle est
+     * lisible par quiconque a ce transcript. `RevealFees` prend la trésorerie
+     * dans son constructeur et n'expose rien pour la changer : la graver aurait
+     * envoyé chaque frais de swap, définitivement, vers une adresse que
+     * n'importe qui peut vider.
      *
-     * Vérifiée sur la chaîne : wallet (aucun code), nonce 0, financée.
+     * Une trésorerie doit être une adresse dont la clé n'a jamais quitté son
+     * porteur. Tant qu'elle n'est pas choisie, le déploiement mainnet échoue
+     * plutôt que de graver un défaut — c'est le seul moment où l'erreur est
+     * encore réparable.
      */
-    address constant RH_TREASURY = 0x12fedA390029Fa3Ff4b00f5f59E69c1eD4534e1e;
+    address constant RH_TREASURY = address(0);
 
     /// 1 % — le palier que le launchpad dominant de cette chaîne utilise aussi.
     uint24 constant FEE = 10_000;
