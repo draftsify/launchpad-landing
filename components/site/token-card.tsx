@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
-import type { TokenActivity } from "@/app/api/activity/route";
+import type { TokenActivity } from "@/lib/activity";
 import { formatAge, formatEth } from "@/lib/format";
 import { slugOf, type Launch } from "@/lib/onchain";
 import { CopyAddress } from "@/components/site/copy-address";

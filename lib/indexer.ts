@@ -118,6 +118,48 @@ async function timestampsOf(blocks: bigint[]) {
 
 type SwapLog = Log<bigint, number, false, typeof SWAP>;
 
+const LAUNCHED = parseAbiItem(
+  "event Launched(address indexed token, address indexed creator, address pool, uint256 supply, int24 tickLower, int24 tickUpper, (uint16,uint32,uint16,uint32,uint32,uint32) rules)"
+);
+
+/**
+ * Le bloc où chaque token a été lancé.
+ *
+ * Sans lui, chaque lecture d'historique partait du bloc 0 : le nœud devait
+ * balayer les 23 millions de blocs de la chaîne pour ne rien trouver avant le
+ * lancement. Un pool ne peut rien avoir émis avant d'exister, donc c'est du
+ * travail entièrement gratuit, et il se répétait à chaque requête et pour
+ * chaque token.
+ *
+ * Le launcher émet `Launched` une fois par token : une seule requête sur son
+ * adresse date tous les lancements d'un coup.
+ */
+export async function readLaunchBlocks(): Promise<Map<string, bigint>> {
+  const blocks = new Map<string, bigint>();
+  if (!LAUNCHER_ADDRESS) return blocks;
+
+  const latest = await publicClient.getBlockNumber();
+  const logs = await getLogsSplit(
+    (from, to) =>
+      publicClient.getLogs({
+        address: LAUNCHER_ADDRESS as `0x${string}`,
+        event: LAUNCHED,
+        fromBlock: from,
+        toBlock: to,
+      }),
+    0n,
+    latest
+  );
+
+  for (const log of logs) {
+    const token = log.args.token;
+    if (token && log.blockNumber !== null) {
+      blocks.set(token.toLowerCase(), log.blockNumber);
+    }
+  }
+  return blocks;
+}
+
 /**
  * Tout ce qu'un pool a fait, relu depuis ses journaux.
  *
@@ -129,15 +171,17 @@ export async function readActivity(params: {
   token: `0x${string}`;
   pool: `0x${string}`;
   tokenIsToken0: boolean;
+  /** Bloc du lancement. Rien n'a pu se produire avant : voir `readLaunchBlocks`. */
+  fromBlock?: bigint;
 }): Promise<Activity> {
-  const { token, pool, tokenIsToken0 } = params;
+  const { token, pool, tokenIsToken0, fromBlock = 0n } = params;
 
   const latest = await publicClient.getBlockNumber();
 
   const swaps = await getLogsSplit<SwapLog>(
-    (fromBlock, toBlock) =>
-      publicClient.getLogs({ address: pool, event: SWAP, fromBlock, toBlock }),
-    0n,
+    (from, to) =>
+      publicClient.getLogs({ address: pool, event: SWAP, fromBlock: from, toBlock: to }),
+    fromBlock,
     latest
   );
 
@@ -151,7 +195,9 @@ export async function readActivity(params: {
     series: [],
   };
 
-  if (swaps.length === 0) return { ...empty, holders: await countHolders(token, pool, latest) };
+  if (swaps.length === 0) {
+    return { ...empty, holders: await countHolders(token, pool, fromBlock, latest) };
+  }
 
   swaps.sort((a, b) =>
     a.blockNumber === b.blockNumber
@@ -186,7 +232,7 @@ export async function readActivity(params: {
 
   const [series, holders] = await Promise.all([
     buildSeries(swaps, tokenIsToken0, latest),
-    countHolders(token, pool, latest),
+    countHolders(token, pool, fromBlock, latest),
   ]);
 
   // Variation sur 24 h : le premier prix observé après la coupure, comparé au
@@ -272,12 +318,13 @@ async function buildSeries(
 async function countHolders(
   token: `0x${string}`,
   pool: `0x${string}`,
+  fromBlock: bigint,
   latest: bigint
 ) {
   const transfers = await getLogsSplit(
-    (fromBlock, toBlock) =>
-      publicClient.getLogs({ address: token, event: TRANSFER, fromBlock, toBlock }),
-    0n,
+    (from, to) =>
+      publicClient.getLogs({ address: token, event: TRANSFER, fromBlock: from, toBlock: to }),
+    fromBlock,
     latest
   );
 

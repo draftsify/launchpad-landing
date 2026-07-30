@@ -231,6 +231,36 @@ contract RevealToken is ERC20 {
         return byUnlock < byWindow ? byUnlock : byWindow;
     }
 
+    /// L'instant où le premier achat devient possible.
+    function buyOpensAt() external view returns (uint256) {
+        return launchedAt + rules.launchDelay;
+    }
+
+    /**
+     * Le plus gros achat que les règles laissent passer à cet instant, en tokens.
+     *
+     * Le pendant de `sellableNow` du côté des achats, et il manquait. Le
+     * déblocage et le plafond de vente étaient tous deux lisibles, donc une
+     * interface pouvait expliquer un refus de vente ; rien n'exposait la rampe
+     * anti-sniper, donc un achat trop gros ne pouvait qu'échouer en « TF », que
+     * l'utilisateur lisait comme une panne. Le motif était pourtant déterminé
+     * d'avance — il suffisait de le rendre lisible.
+     *
+     * Zéro pendant le délai. La supply entière quand la rampe est ouverte : à ce
+     * moment aucune règle ne borne plus l'achat, et c'est le seul plafond qui
+     * reste vrai.
+     */
+    function maxBuyNow() public view returns (uint256) {
+        if (pool == address(0)) return 0;
+
+        uint256 sinceLaunch = block.timestamp - launchedAt;
+        if (sinceLaunch < rules.launchDelay) return 0;
+
+        uint256 maxBps = rules.rampBps(sinceLaunch);
+        if (maxBps >= BPS) return totalSupply();
+        return (totalSupply() * maxBps) / BPS;
+    }
+
     // ------------------------------------------------------------- transferts
 
     function _update(address from, address to, uint256 value) internal override {

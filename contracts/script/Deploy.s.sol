@@ -30,6 +30,19 @@ contract Deploy is Script, StdCheats {
     address constant RH_V3_FACTORY = 0x1f7d7550B1b028f7571E69A784071F0205FD2EfA;
     address constant RH_WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
 
+    /**
+     * Destinataire des frais de swap sur Robinhood Chain.
+     *
+     * Écrit ici, et non tapé au moment du déploiement, pour une raison précise :
+     * `RevealFees` prend cette adresse dans son constructeur et n'expose rien
+     * pour la changer. Une faute de frappe sur une ligne de commande enverrait
+     * tous les frais, définitivement, vers une adresse dont personne n'a la clé.
+     * Dans le dépôt, elle est relue, comparée et versionnée avant d'être gravée.
+     *
+     * Vérifiée sur la chaîne : wallet (aucun code), nonce 0, financée.
+     */
+    address constant RH_TREASURY = 0x12fedA390029Fa3Ff4b00f5f59E69c1eD4534e1e;
+
     /// 1 % — le palier que le launchpad dominant de cette chaîne utilise aussi.
     uint24 constant FEE = 10_000;
     uint16 constant CARDINALITY = 120;
@@ -67,17 +80,25 @@ contract Deploy is Script, StdCheats {
         address factory = vm.envOr("AMM_FACTORY", address(0));
         address weth = vm.envOr("WETH", address(0));
         // Destinataire des frais de swap. Sans lui, rien ne serait collectable.
-        address treasury = vm.envOr("TREASURY", msg.sender);
+        // Le défaut reste `msg.sender` hors mainnet : sur un fork ou une chaîne
+        // de test, la trésorerie n'a aucune importance et exiger une adresse ne
+        // ferait que compliquer les tests.
+        address treasury = vm.envOr("TREASURY", address(0));
 
         bool mainnet = block.chainid == ROBINHOOD_MAINNET;
         if (mainnet) {
             if (factory == address(0)) factory = RH_V3_FACTORY;
             if (weth == address(0)) weth = RH_WETH;
+            if (treasury == address(0)) treasury = RH_TREASURY;
+
             // En mainnet on ne devine jamais : un WETH faux passerait le
-            // déploiement et casserait chaque lancement.
-            if (factory == address(0) || weth == address(0)) {
+            // déploiement et casserait chaque lancement, et une trésorerie
+            // nulle rendrait les frais définitivement incollectables.
+            if (factory == address(0) || weth == address(0) || treasury == address(0)) {
                 revert UnknownChain(block.chainid);
             }
+        } else if (treasury == address(0)) {
+            treasury = msg.sender;
         }
 
         vm.startBroadcast();

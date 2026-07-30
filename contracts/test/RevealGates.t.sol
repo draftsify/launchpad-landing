@@ -45,6 +45,45 @@ contract RevealGatesTest is RevealBase {
         assertGt(token.balanceOf(whale), maxBuy, "la rampe ne bride plus");
     }
 
+    /**
+     * La vue d'achat doit dire exactement ce que la porte fera.
+     *
+     * Uniswap emballe les transferts : un achat refuse remonte « TF », jamais
+     * BuyTooLarge. Une interface ne peut donc rien expliquer apres coup, elle ne
+     * peut que demander avant. Si cette vue et la porte divergent, l'interface
+     * ment — d'ou ce test, qui les compare aux trois moments qui comptent.
+     */
+    function test_MaxBuyNowMatchesWhatTheGateAllows() public {
+        assertEq(token.buyOpensAt(), token.launchedAt() + 5, "l'ouverture est annoncee");
+
+        // Pendant le delai : rien ne passe, et la vue le dit.
+        assertEq(token.maxBuyNow(), 0, "zero pendant le delai anti-sniper");
+        _giveWeth(alice, 0.01 ether);
+        vm.prank(alice);
+        vm.expectRevert(bytes("TF"));
+        router.swap(address(pool), alice, !tokenFirst, int256(uint256(0.01 ether)));
+
+        // Sur la rampe : la vue rend la borne que _guardBuy applique.
+        _warp(6);
+        uint256 announced = token.maxBuyNow();
+        assertGt(announced, 0, "la rampe est ouverte");
+        assertLt(announced, token.totalSupply(), "mais elle bride encore");
+
+        // Un achat qui depasserait la borne annoncee est refuse...
+        _giveWeth(whale, 1 ether);
+        vm.prank(whale);
+        vm.expectRevert(bytes("TF"));
+        router.swap(address(pool), whale, !tokenFirst, int256(uint256(1 ether)));
+
+        // ...et un achat qui reste dessous passe.
+        _buy(alice, 0.002 ether);
+        assertLe(token.balanceOf(alice), announced, "l'achat tient sous l'annonce");
+
+        // Rampe finie : plus aucune regle ne borne l'achat.
+        _pastRamp();
+        assertEq(token.maxBuyNow(), token.totalSupply(), "plus de bride une fois la rampe finie");
+    }
+
     // ------------------------------------------------------------ deblocage
 
     function test_UnlockStartsAtInitialShareAndCompletes() public {

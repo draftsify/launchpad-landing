@@ -20,6 +20,10 @@ export const tokenAbi = parseAbi([
   "function quote() view returns (address)",
   "function launchedAt() view returns (uint64)",
   "function sellableNow(address holder) view returns (uint256)",
+  // Le pendant côté achat : sans lui, un achat au-dessus de la rampe ne peut
+  // qu'échouer en « TF », et l'interface n'a rien à dire à l'utilisateur.
+  "function maxBuyNow() view returns (uint256)",
+  "function buyOpensAt() view returns (uint256)",
   "function releasable(address holder) view returns (uint256)",
   "function windowRemaining(address holder) view returns (uint256)",
   "function unlockedBps(address holder) view returns (uint256)",

@@ -69,7 +69,11 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
 
   // Le délai vient du launcher, pas du dépôt : c'est lui qui fait revert.
   const rules = useRules();
-  const opensAt = launch.launchedAt + rules.launchDelay;
+  // …et l'ouverture exacte du token lui-même, qui est ce qui fait foi. Le calcul
+  // depuis les règles n'est plus qu'un repli le temps de la lecture.
+  const [opensAtChain, setOpensAtChain] = useState<number | null>(null);
+  const [maxBuy, setMaxBuy] = useState<bigint | null>(null);
+  const opensAt = opensAtChain ?? launch.launchedAt + rules.launchDelay;
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -122,6 +126,44 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
     return () => clearInterval(id);
   }, [refresh]);
 
+  /**
+   * Les bornes d'achat, qui ne dépendent d'aucun compte.
+   *
+   * Lues même sans wallet connecté : « la rampe n'autorise que X pour l'instant »
+   * est une information sur le token, pas sur son lecteur, et c'est justement ce
+   * qu'il faut savoir avant de connecter quoi que ce soit.
+   */
+  useEffect(() => {
+    let alive = true;
+    const read = async () => {
+      try {
+        const [opens, max] = await Promise.all([
+          publicClient.readContract({
+            address: launch.address,
+            abi: tokenAbi,
+            functionName: "buyOpensAt",
+          }),
+          publicClient.readContract({
+            address: launch.address,
+            abi: tokenAbi,
+            functionName: "maxBuyNow",
+          }),
+        ]);
+        if (!alive) return;
+        setOpensAtChain(Number(opens));
+        setMaxBuy(max);
+      } catch {
+        // Vue absente ou nœud muet : on retombe sur les règles, sans mentir.
+      }
+    };
+    read();
+    const id = setInterval(read, 12_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [launch.address]);
+
   // Le devis vient du quoter, qui simule le swap pour de vrai : il traverse donc
   // les mêmes gardes, et rend null quand la transaction échouerait.
   useEffect(() => {
@@ -159,6 +201,14 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
 
   const overSellable =
     side === "sell" && sellable !== null && inWei > sellable && inWei > 0n;
+  // Côté achat, la contrainte porte sur les tokens qui sortiraient, pas sur
+  // l'ETH qui entre : c'est le transfert pool → acheteur que la rampe mesure.
+  const overBuyRamp =
+    side === "buy" &&
+    !notOpenYet &&
+    maxBuy !== null &&
+    out !== null &&
+    out > maxBuy;
   const needsApproval =
     side === "sell" && allowance !== null && inWei > allowance && inWei > 0n;
 
@@ -408,10 +458,20 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
             {formatTokens(Number(formatEther(sellable!)))} right now.
           </p>
         )}
-        {out === null && inWei > 0n && !quoting && !overSellable && (
+        {overBuyRamp && (
+          <p className="text-foreground">
+            Above the anti-sniper ramp. It allows{" "}
+            {formatTokens(Number(formatEther(maxBuy!)))} ${launch.symbol} per buy
+            right now, and opens further every second.
+          </p>
+        )}
+        {/* Le quoter simule le swap : s'il refuse alors qu'aucune borne connue
+            n'est franchie, c'est la liquidité elle-même qui ne suit pas. On ne
+            devine pas une raison qu'on n'a pas lue. */}
+        {out === null && inWei > 0n && !quoting && !overSellable && !overBuyRamp && (
           <p className="text-muted-foreground">
-            The pool refuses this size right now — the buy ramp or the impact cap
-            is still closed on it. Try smaller.
+            The pool refuses this size right now. Nothing in the rules explains
+            it, so it is the pool&apos;s own depth — try smaller.
           </p>
         )}
         {account && unlocked !== null && balance !== null && balance > 0n && (
@@ -437,7 +497,9 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
         ) : (
           <Button
             className="w-full"
-            disabled={working || inWei <= 0n || overSellable || notOpenYet}
+            disabled={
+              working || inWei <= 0n || overSellable || overBuyRamp || notOpenYet
+            }
             onClick={send}
           >
             {working ? (

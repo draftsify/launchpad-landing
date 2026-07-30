@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { ProtocolActivity, TokenActivity } from "@/app/api/activity/route";
+import type { ProtocolActivity, TokenActivity } from "@/lib/activity";
 import { isDeployed } from "@/lib/chain";
 import type { Activity } from "@/lib/indexer";
 

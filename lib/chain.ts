@@ -1,4 +1,4 @@
-import { createPublicClient, defineChain, http } from "viem";
+import { createPublicClient, defineChain, fallback, http } from "viem";
 
 /**
  * Robinhood Chain. Pile Arbitrum Orbit, déploiement de contrats permissionless.
@@ -55,10 +55,36 @@ export const LAUNCHER_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHER ?? "") as
 
 export const isDeployed = /^0x[0-9a-fA-F]{40}$/.test(LAUNCHER_ADDRESS);
 
-/** Client de lecture : aucun wallet requis. */
+/**
+ * Nœud payant, côté serveur uniquement.
+ *
+ * Sans préfixe `NEXT_PUBLIC_`, cette valeur n'entre pas dans le bundle envoyé
+ * au navigateur : une URL contenant une clé d'API reste sur le serveur, où
+ * seuls l'indexeur et le rendu s'en servent. Les navigateurs continuent de
+ * parler au nœud public, qui ne coûte rien et n'expose rien.
+ *
+ * Attention au choix du fournisseur : Robinhood Chain est une pile Arbitrum
+ * Orbit. Les services spécialisés d'un autre écosystème — Helius, par exemple,
+ * qui ne sert que Solana — ne peuvent pas répondre ici, quel que soit le plan
+ * souscrit. Il faut un fournisseur qui accepte une chaîne Orbit personnalisée,
+ * ou un nœud dédié.
+ */
+const serverRpc = process.env.RPC_URL?.trim();
+
+/**
+ * Client de lecture : aucun wallet requis.
+ *
+ * Repli et non remplacement : le nœud payant passe en premier, le public reste
+ * derrière. Une panne du premier ne doit pas éteindre le site, seulement le
+ * ralentir — et pendant l'indexation, où une lecture sur mille échoue parfois,
+ * c'est la différence entre un historique complet et un trou.
+ */
 export const publicClient = createPublicClient({
   chain: activeChain,
-  transport: http(),
+  transport:
+    serverRpc && !rpcOverride
+      ? fallback([http(serverRpc), http()], { rank: false })
+      : http(),
 });
 
 /**
