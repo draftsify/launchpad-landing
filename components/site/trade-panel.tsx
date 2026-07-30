@@ -31,6 +31,16 @@ type Status =
 const MAX_UINT = (1n << 256n) - 1n;
 
 /**
+ * Tolérance de slippage, en points de base.
+ *
+ * `amountOutMinimum: 0` accepterait n'importe quel résultat, y compris zéro :
+ * c'est l'invitation ouverte au sandwich, et sur un pool jeune et peu profond
+ * l'attaque est bon marché. 1 % est large pour un pool de ce type sans laisser
+ * la porte ouverte.
+ */
+const SLIPPAGE_BPS = 100n;
+
+/**
  * Achat et vente contre le pool du token.
  *
  * Deux choses gouvernent ce composant.
@@ -212,17 +222,34 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
         }
       }
 
+      const tokenIn = buying ? launch.quoteToken : launch.address;
+      const tokenOut = buying ? launch.address : launch.quoteToken;
+
+      // Plancher de sortie recalculé sur un devis frais, pas sur celui affiché :
+      // le prix a pu bouger pendant que l'utilisateur lisait, et un plancher
+      // périmé est soit trop bas (inutile) soit trop haut (refus systématique).
+      const expected = await quote(tokenIn, tokenOut, amountIn);
+      if (expected === null || expected === 0n) {
+        setStatus({
+          kind: "error",
+          message:
+            "The pool refuses this trade right now, so there is no price to protect against. Nothing was sent.",
+        });
+        return;
+      }
+      const amountOutMinimum = (expected * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+
       const data = encodeFunctionData({
         abi: routerAbi,
         functionName: "exactInputSingle",
         args: [
           {
-            tokenIn: buying ? launch.quoteToken : launch.address,
-            tokenOut: buying ? launch.address : launch.quoteToken,
+            tokenIn,
+            tokenOut,
             fee: POOL_FEE,
             recipient: from,
             amountIn,
-            amountOutMinimum: 0n,
+            amountOutMinimum,
             sqrtPriceLimitX96: 0n,
           },
         ],
@@ -439,8 +466,8 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
           </a>
         )}
         <p className="text-[11px] text-muted-foreground">
-          Routed through the chain&apos;s Uniswap V3 router. Reveal never holds
-          your funds.
+          Routed through the chain&apos;s Uniswap V3 router, with 1% slippage
+          tolerance. Reveal never holds your funds.
         </p>
       </div>
     </section>
