@@ -1,73 +1,116 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
+import Link from "next/link";
+import { ArrowRight, Coins, Loader2, TriangleAlert } from "lucide-react";
 
-import {
-  SERIES,
-  formatCount,
-  formatUsd,
-  getStats,
-  type Range,
-} from "@/lib/analytics";
+import { activeChain, isDeployed } from "@/lib/chain";
+import { dailyLaunches, statsFrom } from "@/lib/analytics";
 import { BarChart } from "@/components/site/bar-chart";
+import { Button } from "@/components/ui/button";
 import { CountUp } from "@/components/site/count-up";
-import { cn } from "@/lib/utils";
+import { useLaunches } from "@/components/site/use-launches";
 
-const RANGES: { id: Range; label: string }[] = [
-  { id: "24h", label: "24h" },
-  { id: "all", label: "All time" },
-];
+function Frame({
+  children,
+  icon,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-20 text-center">
+      <span className="flex size-11 items-center justify-center rounded-full border bg-card">
+        {icon}
+      </span>
+      {children}
+    </div>
+  );
+}
 
 export function AnalyticsDashboard() {
-  const [range, setRange] = useState<Range>("24h");
-  const stats = getStats(range);
+  const { data: launches, loading, error } = useLaunches();
+
+  // Le temps entre dans le calcul (fenêtre de 24 h, axe des jours) : il est lu
+  // une fois par rendu, à côté des données qu'il date.
+  const { stats, series } = useMemo(() => {
+    const now = Date.now();
+    return {
+      stats: statsFrom(launches, now),
+      series: dailyLaunches(launches, now),
+    };
+  }, [launches]);
+
+  if (!isDeployed) {
+    return (
+      <Frame icon={<Coins className="size-5 text-muted-foreground" />}>
+        <div className="space-y-1">
+          <p className="font-medium">No launcher deployed yet</p>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+            Every figure on this page is summed from the RevealLauncher registry
+            on {activeChain.name}. None is deployed, so there is nothing to sum.
+          </p>
+        </div>
+      </Frame>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed px-6 py-20 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Reading {activeChain.name}…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Frame icon={<TriangleAlert className="size-5 text-muted-foreground" />}>
+        <div className="space-y-1">
+          <p className="font-medium">The node did not answer</p>
+          <p className="mx-auto max-w-md text-sm text-muted-foreground">
+            These numbers are zero because nothing could be read, not because
+            nothing has happened. {error}
+          </p>
+        </div>
+      </Frame>
+    );
+  }
+
+  if (launches.length === 0) {
+    return (
+      <Frame icon={<Coins className="size-5 text-muted-foreground" />}>
+        <div className="space-y-1">
+          <p className="font-medium">No token has launched yet</p>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+            The launcher is live and its registry is empty. There is nothing to
+            measure until something launches.
+          </p>
+        </div>
+        <Button variant="card" asChild>
+          <Link href="/create">
+            Launch a token
+            <ArrowRight />
+          </Link>
+        </Button>
+      </Frame>
+    );
+  }
+
   const [hero, ...rest] = stats;
-  const empty = SERIES.volume.length === 0 && SERIES.launches.length === 0;
 
   return (
     <div className="space-y-4">
-      {/* Un seul rang de filtres, au-dessus de tout ce qu'il gouverne. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div
-          role="tablist"
-          aria-label="Time range"
-          className="inline-flex items-center rounded-full border bg-card p-1"
-        >
-          {RANGES.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              role="tab"
-              aria-selected={range === r.id}
-              onClick={() => setRange(r.id)}
-              className={cn(
-                "h-7 rounded-full px-3 text-sm transition-colors",
-                range === r.id
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="rounded-2xl border bg-card p-5 sm:p-6">
         <div className="grid gap-6 sm:grid-cols-3 sm:divide-x sm:divide-border">
           <div className="sm:pr-6">
             <p className="text-sm text-muted-foreground">{hero.label}</p>
-            {/* Chiffre-phare : chiffres proportionnels, un seul par vue. */}
+            {/* Chiffre-phare : un seul par vue, en chiffres proportionnels. */}
             <p className="mt-1 text-5xl font-medium tracking-tight">
-              <CountUp
-                key={`${range}-${hero.label}`}
-                value={hero.value}
-                format={hero.kind === "usd" ? formatUsd : formatCount}
-              />
+              <CountUp value={hero.value} format={hero.format} />
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {hero.delta ? `${hero.delta} ${hero.hint}` : hero.hint}
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{hero.hint}</p>
           </div>
 
           {rest.map((stat, i) => (
@@ -75,52 +118,51 @@ export function AnalyticsDashboard() {
               <p className="text-sm text-muted-foreground">{stat.label}</p>
               <p className="mt-1 text-3xl font-medium tracking-tight">
                 <CountUp
-                  key={`${range}-${stat.label}`}
                   value={stat.value}
-                  format={stat.kind === "usd" ? formatUsd : formatCount}
+                  format={stat.format}
                   delay={0.1 + i * 0.1}
                 />
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {stat.delta ? `${stat.delta} ${stat.hint}` : stat.hint}
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{stat.hint}</p>
             </div>
           ))}
         </div>
 
         <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
-          Zero because nothing has launched yet — not a placeholder.
+          Read from {activeChain.name} across{" "}
+          {launches.length === 1 ? "1 pool" : `${launches.length} pools`}, live.
+          Amounts are in the quote asset the pools are denominated in — no price
+          oracle is involved.
         </p>
       </div>
 
-      {/* Une série vide ne se trace pas. Plutôt qu'un cadre d'axes sans
-          barres, on nomme ce qui manque : un indexeur, pas des données. */}
-      {empty ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed bg-card/40 px-6 py-16 text-center">
-          <p className="font-medium">Nothing to chart yet</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            Daily volume and launch counts are history, and a node only answers
-            the present. These charts fill in once tokens launch and an indexer
-            records the swaps.
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BarChart
+          title="Token launches"
+          subtitle="Per day, from each token's recorded launch time."
+          data={series}
+          format={(v) => Math.round(v).toString()}
+          integer
+        />
+
+        {/* La seconde moitié de la grille portait un volume quotidien inventé.
+            Ce qui la remplit maintenant est la raison pour laquelle elle est
+            vide : nommer ce qui manque vaut mieux que tracer un zéro. */}
+        <section className="flex flex-col justify-center gap-3 rounded-2xl border border-dashed bg-card/40 p-5">
+          <h3 className="font-medium">Volume, trades and holders</h3>
+          <p className="text-sm text-muted-foreground">
+            These are not on this page because a node cannot answer them. A swap
+            leaves a log, not a balance: totalling volume, counting trades or
+            listing holders means replaying every event the pools have ever
+            emitted, and keeping that tally somewhere.
           </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <BarChart
-            title="Trading volume"
-            subtitle="Daily context, latest complete day highlighted."
-            data={SERIES.volume}
-            format={formatUsd}
-          />
-          <BarChart
-            title="Token launches"
-            subtitle="Daily context, latest complete day highlighted."
-            data={SERIES.launches}
-            format={(v) => formatCount(Math.round(v))}
-            integer
-          />
-        </div>
-      )}
+          <p className="text-sm text-muted-foreground">
+            That is an indexer, and Reveal does not run one yet. Until it does,
+            these charts would be guesses — so they are absent rather than
+            approximate.
+          </p>
+        </section>
+      </div>
     </div>
   );
 }

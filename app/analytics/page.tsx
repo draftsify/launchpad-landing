@@ -8,7 +8,7 @@ import { AnalyticsDashboard } from "@/components/site/analytics-dashboard";
 export const metadata: Metadata = {
   title: "Analytics — Reveal",
   description:
-    "Volume, token deployments and trading activity across the Reveal launchpad.",
+    "Liquidity, market cap and token deployments across the Reveal launchpad, read live from the chain.",
 };
 
 export default function AnalyticsPage() {
@@ -22,8 +22,8 @@ export default function AnalyticsPage() {
             <BlurWords text="Protocol analytics" delay={0.05} />
           </h1>
           <p className="text-sm text-muted-foreground sm:text-base">
-            Volume, deployments and trading activity across every token launched
-            on Reveal.
+            Summed across every token in the launcher&rsquo;s registry, read from
+            the chain at each refresh.
           </p>
         </header>
 

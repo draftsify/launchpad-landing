@@ -15,6 +15,7 @@ import { motion, useReducedMotion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/x-icon";
+import { useRules } from "@/components/site/use-rules";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import {
   activeChain,
@@ -27,10 +28,7 @@ import {
 import { launchCall, tokenFromReceipt, waitForLaunch } from "@/lib/launcher";
 import { byteLength, shrinkImage, toDataUri } from "@/lib/metadata";
 import { useWallet } from "@/components/site/wallet-provider";
-import {
-  RULES,
-  formatDuration,
-} from "@/lib/presets";
+import { formatDuration } from "@/lib/presets";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -135,6 +133,8 @@ export function CreateForm() {
     | { kind: "error"; message: string }
   >({ kind: "idle" });
   const reduce = useReducedMotion();
+  // Ce que ce lancement subira vraiment, lu sur le launcher.
+  const rules = useRules();
 
   const [name, setName] = useState("");
   const [ticker, setTicker] = useState("");
@@ -447,13 +447,13 @@ export function CreateForm() {
         >
           <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
             {[
-              ["Sellable at launch", `${RULES.initialUnlock}%`],
-              ["Fully unlocked after", formatDuration(RULES.unlockHours)],
+              ["Sellable at launch", `${rules.initialUnlock}%`],
+              ["Fully unlocked after", formatDuration(rules.unlockHours)],
               [
                 "Impact cap",
-                `${RULES.impactCap}% / ${RULES.impactWindow} min`,
+                `${rules.impactCap}% / ${rules.impactWindow} min`,
               ],
-              ["First buy opens", `${RULES.launchDelay}s after deploy`],
+              ["First buy opens", `${rules.launchDelay}s after deploy`],
             ].map(([label, value]) => (
               <div key={label} className="space-y-1">
                 <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">
@@ -580,29 +580,29 @@ export function CreateForm() {
                 Sellable at launch
               </span>
               <span className="font-mono text-xs tabular-nums">
-                {RULES.initialUnlock}%
+                {rules.initialUnlock}%
               </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
               <motion.div
                 className="h-full rounded-full bg-foreground/70"
                 initial={false}
-                animate={{ width: `${RULES.initialUnlock}%` }}
+                animate={{ width: `${rules.initialUnlock}%` }}
                 transition={
                   reduce ? { duration: 0 } : { duration: 0.4, ease: EASE }
                 }
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Reaches 100% after {formatDuration(RULES.unlockHours)}. Capped at{" "}
-              {RULES.impactCap}% of the pool&apos;s ETH per {RULES.impactWindow} min.
+              Reaches 100% after {formatDuration(rules.unlockHours)}. Capped at{" "}
+              {rules.impactCap}% of the pool&apos;s ETH per {rules.impactWindow} min.
             </p>
           </div>
 
           <dl className="space-y-1.5 border-t pt-4 text-xs">
             {[
               ["Your cost", "Gas only"],
-              ["First buy opens", `${RULES.launchDelay}s after deploy`],
+              ["First buy opens", `${rules.launchDelay}s after deploy`],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">{label}</dt>

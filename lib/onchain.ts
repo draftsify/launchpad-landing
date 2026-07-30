@@ -3,6 +3,7 @@ import { formatEther } from "viem";
 import { LAUNCHER_ADDRESS, isDeployed, publicClient } from "@/lib/chain";
 import { launcherAbi, tokenAbi } from "@/lib/launcher";
 import { parseMetadata, type TokenMetadata } from "@/lib/metadata";
+import type { Rules } from "@/lib/presets";
 import { erc20Abi, poolAbi, priceFromSqrt } from "@/lib/uniswap";
 
 /**
@@ -123,6 +124,37 @@ export async function readLaunches(): Promise<Launch[]> {
   return launches
     .filter((l): l is Launch => l !== null)
     .sort((a, b) => b.launchedAt - a.launchedAt);
+}
+
+/**
+ * Les règles réellement appliquées, lues sur le launcher.
+ *
+ * Elles vivaient jusqu'ici en dur dans `lib/presets.ts`, recopiées à la main
+ * depuis le script de déploiement. Deux copies d'un même nombre finissent par
+ * diverger, et celle-ci n'est pas décorative : le panneau d'échange s'en sert
+ * pour décider quand le premier achat s'ouvre. Un délai affiché plus court que
+ * le délai appliqué ferait proposer un achat qui ne peut que revert.
+ *
+ * Le launcher n'a aucune fonction pour les changer : une lecture suffit.
+ */
+export async function readRules(): Promise<Rules | null> {
+  if (!isDeployed) return null;
+
+  const [initialUnlockBps, unlockSeconds, impactCapBps, impactWindow, launchDelay, buyRamp] =
+    await publicClient.readContract({
+      address: LAUNCHER_ADDRESS as `0x${string}`,
+      abi: launcherAbi,
+      functionName: "rules",
+    });
+
+  return {
+    initialUnlock: initialUnlockBps / 100,
+    unlockHours: unlockSeconds / 3600,
+    impactCap: impactCapBps / 100,
+    impactWindow: impactWindow / 60,
+    launchDelay,
+    buyRamp: buyRamp / 60,
+  };
 }
 
 export async function readLaunchBySlug(slug: string): Promise<Launch | null> {

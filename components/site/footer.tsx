@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { GithubIcon } from "@/components/github-icon";
-import { XIcon } from "@/components/x-icon";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { cn } from "@/lib/utils";
 
@@ -14,16 +13,33 @@ const PRODUCT = [
   { title: "Analytics", href: "/analytics" },
 ];
 
+/**
+ * Trois entrées d'ici pointaient vers #brand, #security et #contact : des
+ * ancres vers des sections qui n'existent sur aucune page. Un lien qui ne mène
+ * nulle part coûte plus qu'une colonne plus courte — il fait croire à une
+ * charte graphique, à une politique de divulgation et à une adresse.
+ *
+ * Ce qui reste mène quelque part. « Security » va aux limites connues, qui
+ * disent en toutes lettres que le protocole n'est pas audité.
+ */
 const COMPANY = [
   { title: "Terms & Policy", href: "/terms" },
-  { title: "Brand assets", href: "#brand" },
-  { title: "Security", href: "#security" },
-  { title: "Contact", href: "#contact" },
+  { title: "Security", href: "/docs#limits" },
 ];
 
+/**
+ * L'icône X visait x.com sans compte : un logo qui ouvre la page d'accueil du
+ * réseau. Elle revient dès qu'un compte existe — réimporter `XIcon` depuis
+ * `@/components/x-icon` et ajouter
+ * `{ label: "X", icon: <XIcon />, href: "https://x.com/<compte>" }`.
+ * Le composant reste dans le dépôt, et sert déjà aux liens des tokens.
+ */
 const SOCIALS = [
-  { label: "GitHub", icon: <GithubIcon />, href: "https://github.com" },
-  { label: "X", icon: <XIcon />, href: "https://x.com" },
+  {
+    label: "GitHub",
+    icon: <GithubIcon />,
+    href: "https://github.com/draftsify/launchpad-landing",
+  },
 ];
 
 export function Footer() {

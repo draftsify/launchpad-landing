@@ -45,6 +45,20 @@ export function BarChart({
   const [hovered, setHovered] = useState<number | null>(null);
   const reduce = useReducedMotion();
 
+  // Une série vide ne se trace pas : sans elle, l'échelle vaudrait -Infinity et
+  // l'axe des dates lirait une case qui n'existe pas.
+  if (data.length === 0) {
+    return (
+      <section className="flex flex-col gap-1 rounded-2xl border bg-card p-5">
+        <h3 className="font-medium">{title}</h3>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+        <p className="mt-8 mb-8 text-center text-sm text-muted-foreground">
+          Nothing to chart yet.
+        </p>
+      </section>
+    );
+  }
+
   const scale = niceMax(Math.max(...data.map((d) => d.value)), integer);
   const lastIndex = data.length - 1;
   const ticks = [scale, scale / 2, 0];

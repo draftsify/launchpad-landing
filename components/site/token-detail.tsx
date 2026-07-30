@@ -5,13 +5,13 @@ import { ArrowLeft, Globe, Loader2, Send, TriangleAlert } from "lucide-react";
 
 import { activeChain, explorerAddress, isDeployed } from "@/lib/chain";
 import { formatAge, formatEth, formatTokens } from "@/lib/format";
-import { RULES } from "@/lib/presets";
 import { Button } from "@/components/ui/button";
 import { CopyAddress } from "@/components/site/copy-address";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { TokenMark } from "@/components/site/token-mark";
 import { TradePanel } from "@/components/site/trade-panel";
 import { useLaunch } from "@/components/site/use-launches";
+import { useRules } from "@/components/site/use-rules";
 import { XIcon } from "@/components/x-icon";
 import { formatEther } from "viem";
 
@@ -34,6 +34,8 @@ function Frame({ children }: { children: React.ReactNode }) {
 
 export function TokenDetail({ slug }: { slug: string }) {
   const { data: launch, loading, error, reload } = useLaunch(slug);
+  // Les règles affichées sont celles que le launcher applique, pas une copie.
+  const rules = useRules();
 
   if (!isDeployed || error || (!loading && !launch)) {
     return (
@@ -189,10 +191,10 @@ export function TokenDetail({ slug }: { slug: string }) {
 
             <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                ["Sellable at launch", `${RULES.initialUnlock}%`],
-                ["Fully unlocked after", `${RULES.unlockHours}h`],
-                ["Impact cap", `${RULES.impactCap}% / ${RULES.impactWindow} min`],
-                ["Launch delay", `${RULES.launchDelay}s`],
+                ["Sellable at launch", `${rules.initialUnlock}%`],
+                ["Fully unlocked after", `${rules.unlockHours}h`],
+                ["Impact cap", `${rules.impactCap}% / ${rules.impactWindow} min`],
+                ["Launch delay", `${rules.launchDelay}s`],
               ].map(([label, value]) => (
                 <div key={label} className="space-y-1">
                   <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">

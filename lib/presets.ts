@@ -20,6 +20,12 @@ export type Rules = {
  * se contraint revient à ne pas le contraindre, et rend deux tokens
  * incomparables. Elles vivent dans le launcher, qui n'a aucune fonction pour
  * les changer.
+ *
+ * Ces valeurs-ci sont celles que `script/Deploy.s.sol` inscrit dans le
+ * launcher. Elles servent aux pages qui décrivent le protocole sans viser un
+ * déploiement, et de première réponse le temps que la chaîne réponde — mais
+ * c'est `useRules()` qui a le dernier mot dès qu'un launcher existe, parce que
+ * c'est le contrat qui applique, pas ce fichier.
  */
 export const RULES: Rules = {
   initialUnlock: 10,

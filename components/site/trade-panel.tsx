@@ -8,7 +8,6 @@ import { activeChain, explorerTx, gasWithBuffer, publicClient } from "@/lib/chai
 import { formatTokens } from "@/lib/format";
 import { tokenAbi } from "@/lib/launcher";
 import type { Launch } from "@/lib/onchain";
-import { RULES } from "@/lib/presets";
 import {
   erc20Abi,
   POOL_FEE,
@@ -17,6 +16,7 @@ import {
   uniswap,
 } from "@/lib/uniswap";
 import { Button } from "@/components/ui/button";
+import { useRules } from "@/components/site/use-rules";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,9 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
   const [out, setOut] = useState<bigint | null>(null);
   const [quoting, setQuoting] = useState(false);
 
-  const opensAt = launch.launchedAt + RULES.launchDelay;
+  // Le délai vient du launcher, pas du dépôt : c'est lui qui fait revert.
+  const rules = useRules();
+  const opensAt = launch.launchedAt + rules.launchDelay;
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -397,7 +399,7 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
         {notOpenYet && (
           <p className="text-muted-foreground">
             Trading opens in {opensAt - now}s — the anti-sniper delay is{" "}
-            {RULES.launchDelay}s.
+            {rules.launchDelay}s.
           </p>
         )}
         {overSellable && (
