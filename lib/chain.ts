@@ -24,8 +24,26 @@ export const robinhoodTestnet = defineChain({
 });
 
 /** Cible du déploiement. Bascule par variable d'environnement, pas par code. */
-export const activeChain =
+const target =
   process.env.NEXT_PUBLIC_CHAIN === "testnet" ? robinhoodTestnet : robinhood;
+
+/**
+ * Redirige les lectures et le réseau proposé au wallet vers un autre nœud, sans
+ * changer le chainId. Sert à pointer un fork local (`anvil --fork-url …`) :
+ * l'identifiant de chaîne reste celui de Robinhood, donc les adresses des
+ * contrats déjà déployés là-bas — la factory Uniswap, le WETH — restent
+ * valables, et rien dans l'application n'a besoin d'un cas particulier.
+ *
+ * Vide en production, où la valeur par défaut est le vrai nœud.
+ */
+const rpcOverride = process.env.NEXT_PUBLIC_RPC_URL?.trim();
+
+export const activeChain = rpcOverride
+  ? defineChain({
+      ...target,
+      rpcUrls: { default: { http: [rpcOverride] } },
+    })
+  : target;
 
 /**
  * Adresse du launcher. Absente tant que rien n'est déployé — l'interface doit
