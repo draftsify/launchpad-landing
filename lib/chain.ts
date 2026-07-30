@@ -61,6 +61,30 @@ export const publicClient = createPublicClient({
   transport: http(),
 });
 
+/**
+ * Limite de gas à passer au wallet, estimée puis majorée.
+ *
+ * Ne pas la fournir laisse le wallet estimer, et son estimation est trop juste
+ * pour un swap Uniswap V3 : `eth_estimateGas` mesure le coût dans l'état
+ * courant, alors que la transaction s'exécute un bloc plus tard, où traverser un
+ * tick non initialisé, écrire une observation d'oracle ou toucher un slot froid
+ * coûte davantage. Le résultat est un OutOfGas qui ressemble à un refus du
+ * protocole alors que le swap était valide — vu et diagnostiqué sur le fork.
+ *
+ * La marge est large parce que se tromper vers le bas coûte une transaction
+ * perdue, alors que se tromper vers le haut ne coûte rien : le gas non consommé
+ * n'est pas facturé.
+ */
+export async function gasWithBuffer(tx: {
+  account: `0x${string}`;
+  to: `0x${string}`;
+  data: `0x${string}`;
+  value?: bigint;
+}) {
+  const estimate = await publicClient.estimateGas(tx);
+  return (estimate * 3n) / 2n;
+}
+
 export function explorerTx(hash: string) {
   const base = activeChain.blockExplorers?.default.url;
   return base ? `${base}/tx/${hash}` : undefined;

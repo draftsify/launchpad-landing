@@ -17,6 +17,7 @@ export const tokenAbi = parseAbi([
   "function symbol() view returns (string)",
   "function metadataURI() view returns (string)",
   "function pool() view returns (address)",
+  "function quote() view returns (address)",
   "function launchedAt() view returns (uint64)",
   "function sellableNow(address holder) view returns (uint256)",
   "function releasable(address holder) view returns (uint256)",

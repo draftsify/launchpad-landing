@@ -5,8 +5,11 @@ import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
+import { formatEth } from "@/lib/format";
+import { slugOf } from "@/lib/onchain";
+import { matchesQuery } from "@/lib/tokens";
 import { TokenMark } from "@/components/site/token-mark";
-import { searchTokens } from "@/lib/tokens";
+import { useLaunches } from "@/components/site/use-launches";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -21,7 +24,8 @@ export function NavSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const reduce = useReducedMotion();
 
-  const results = searchTokens(query);
+  const { data: launches } = useLaunches();
+  const results = launches.filter((l) => matchesQuery(l, query));
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -112,27 +116,31 @@ export function NavSearch() {
                 <p className="px-3 pt-2 pb-1 text-[11px] tracking-wide text-muted-foreground uppercase">
                   Tokens
                 </p>
-                {results.map((token) => (
+                {results.map((launch) => (
                   <Link
-                    key={token.ticker}
-                    href={`/token/${token.slug}`}
+                    key={launch.address}
+                    href={`/token/${slugOf(launch)}`}
                     onClick={() => {
                       setOpen(false);
                       setQuery("");
                     }}
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted"
                   >
-                    <TokenMark token={token} size="sm" />
+                    <TokenMark
+                      symbol={launch.symbol}
+                      image={launch.meta?.image}
+                      size="sm"
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
-                        {token.name}
+                        {launch.name}
                       </span>
                       <span className="block font-mono text-xs text-muted-foreground">
-                        ${token.ticker}
+                        ${launch.symbol}
                       </span>
                     </span>
                     <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                      {token.marketCap}
+                      {formatEth(launch.marketCapEth)}
                     </span>
                   </Link>
                 ))}

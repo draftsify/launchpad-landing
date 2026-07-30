@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { BlurWords } from "@/components/site/blur-in";
 import { TokenBrowser } from "@/components/site/token-browser";
-import { TOKENS } from "@/lib/tokens";
 
 export const metadata: Metadata = {
   title: "Launchpad — Reveal",
@@ -40,7 +39,7 @@ export default function LaunchpadPage() {
           </Button>
         </header>
 
-        <TokenBrowser tokens={TOKENS} />
+        <TokenBrowser />
 
         <FullWidthDivider className="-bottom-px" />
       </section>

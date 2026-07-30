@@ -1,80 +1,40 @@
-/**
- * Aucune règle n'est portée par le token : elles sont identiques pour tout
- * lancement et vivent dans `lib/presets`. Les recopier ici laisserait croire
- * qu'un token peut en avoir d'autres.
- */
-export type Token = {
-  /** Segment d'URL : /token/<slug>. */
-  slug: string;
-  name: string;
-  ticker: string;
-  marketCap: string;
-  marketCapValue: number;
-  /** Variation sur 24 h. */
-  change: number;
-  address: string;
-  age: string;
-  /** Horodatage du lancement, en ms : c'est lui qui trie « Recent ». */
-  launchedAt: number;
-  holders: string;
-  /** Part de la supply encore sous déblocage progressif. */
-  locked: number;
-  /** Absent : la fiche retombe sur un monogramme. */
-  logo?: string;
-  trending?: boolean;
-  description: string;
-  liquidity: string;
-  links: { website?: string; x?: string; telegram?: string };
-};
+import type { Launch } from "@/lib/onchain";
 
-/**
- * Aucun token n'existe tant que le launcher n'est pas déployé et qu'aucun
- * lancement n'a eu lieu.
- *
- * Cette liste reste vide volontairement. Elle a contenu des exemples pendant la
- * construction de l'interface ; les garder aurait présenté des capitalisations,
- * des variations et des nombres de détenteurs inventés comme si c'était le
- * marché. La remplir demande de lire la chaîne — la liste des tokens et leurs
- * métadonnées viennent du launcher, l'historique de prix d'un indexeur qui
- * n'existe pas encore.
- */
-export const TOKENS: Token[] = [];
+export type { Launch };
 
-export function getToken(slug: string) {
-  return TOKENS.find((t) => t.slug === slug);
-}
-
-export function searchTokens(query: string) {
+export function matchesQuery(launch: Launch, query: string) {
   const q = query.trim().toLowerCase();
-  if (!q) return TOKENS;
-  return TOKENS.filter(
-    (t) =>
-      t.name.toLowerCase().includes(q) ||
-      t.ticker.toLowerCase().includes(q) ||
-      t.address.toLowerCase().includes(q)
+  if (!q) return true;
+  return (
+    launch.name.toLowerCase().includes(q) ||
+    launch.symbol.toLowerCase().includes(q) ||
+    launch.address.toLowerCase().includes(q)
   );
 }
 
-export type SortId = "recent" | "trending" | "marketCap" | "unlocked";
+export type SortId = "recent" | "marketCap" | "liquidity";
 
+/**
+ * Trois tris, et pas six.
+ *
+ * « Trending » classait par variation sur 24 h et « Nearly unlocked » par part
+ * de supply encore bloquée. Aucun des deux n'est calculable en lisant la
+ * chaîne : le premier demande le prix d'hier, le second l'état de toutes les
+ * positions. Ils fonctionnaient sur les tokens fictifs. Les garder aurait
+ * voulu dire soit un onglet qui ne trie rien, soit inventer le critère.
+ */
 export const SORTS: { id: SortId; label: string; hint: string }[] = [
   { id: "recent", label: "Recent", hint: "Newest launch first" },
-  { id: "trending", label: "Trending", hint: "Biggest 24h move first" },
   { id: "marketCap", label: "Market cap", hint: "Largest first" },
-  {
-    id: "unlocked",
-    label: "Nearly unlocked",
-    hint: "Least supply left to vest first",
-  },
+  { id: "liquidity", label: "Liquidity", hint: "Deepest pool first" },
 ];
 
-const COMPARE: Record<SortId, (a: Token, b: Token) => number> = {
+const COMPARE: Record<SortId, (a: Launch, b: Launch) => number> = {
   recent: (a, b) => b.launchedAt - a.launchedAt,
-  trending: (a, b) => b.change - a.change,
-  marketCap: (a, b) => b.marketCapValue - a.marketCapValue,
-  unlocked: (a, b) => a.locked - b.locked,
+  marketCap: (a, b) => b.marketCapEth - a.marketCapEth,
+  liquidity: (a, b) => b.liquidityEth - a.liquidityEth,
 };
 
-export function sortTokens(tokens: Token[], sort: SortId) {
-  return [...tokens].sort(COMPARE[sort]);
+export function sortLaunches(launches: Launch[], sort: SortId) {
+  return [...launches].sort(COMPARE[sort]);
 }

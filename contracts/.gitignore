@@ -1,5 +1,13 @@
 out/
 cache/
-# Les chemins sont broadcast/<script>/<chainId>/dry-run/ : deux niveaux.
-broadcast/**/dry-run/
+# Tous les journaux de diffusion, pas seulement les simulations.
+#
+# Un fork anvil garde le chainId de la chaîne qu'il forke : un déploiement de
+# test écrit donc dans broadcast/Deploy.s.sol/4663/, exactement là où un vrai
+# déploiement mainnet écrirait. Les committer ferait lire une adresse jetable
+# comme une preuve de déploiement en production.
+#
+# Un déploiement réel se consigne à la main, avec une adresse vérifiée sur la
+# chaîne — pas dans un fichier qu'un test peut écraser.
+broadcast/
 .env

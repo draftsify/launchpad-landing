@@ -2,58 +2,105 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Coins, Search, X } from "lucide-react";
+import { ArrowRight, Coins, Loader2, Search, TriangleAlert, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
+import { activeChain, isDeployed } from "@/lib/chain";
+import { matchesQuery, SORTS, sortLaunches, type SortId } from "@/lib/tokens";
 import { Button } from "@/components/ui/button";
 import { TokenCard } from "@/components/site/token-card";
-import { SORTS, type SortId, type Token, sortTokens } from "@/lib/tokens";
+import { useLaunches } from "@/components/site/use-launches";
 import { cn } from "@/lib/utils";
 
-function matches(token: Token, query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
+function Empty({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
-    token.name.toLowerCase().includes(q) ||
-    token.ticker.toLowerCase().includes(q) ||
-    token.address.toLowerCase().includes(q)
+    <div className="mt-8 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-20 text-center">
+      <span className="flex size-11 items-center justify-center rounded-full border bg-card">
+        <Coins className="size-5 text-muted-foreground" />
+      </span>
+      <div className="space-y-1">
+        <p className="font-medium">{title}</p>
+        <p className="mx-auto max-w-sm text-sm text-muted-foreground">{children}</p>
+      </div>
+      {action}
+    </div>
   );
 }
 
-export function TokenBrowser({ tokens }: { tokens: Token[] }) {
+export function TokenBrowser() {
+  const { data: launches, loading, error } = useLaunches();
   const [sort, setSort] = useState<SortId>("recent");
   const [query, setQuery] = useState("");
 
   const shown = useMemo(
-    () => sortTokens(tokens.filter((t) => matches(t, query)), sort),
-    [tokens, query, sort]
+    () => sortLaunches(launches.filter((l) => matchesQuery(l, query)), sort),
+    [launches, query, sort]
   );
 
   const active = SORTS.find((s) => s.id === sort)!;
   const searching = query.trim().length > 0;
 
-  // Aucun token déployé : trier et filtrer le vide n'apprend rien, et des
-  // onglets inertes se lisent comme une panne. On dit l'état réel à la place.
-  if (tokens.length === 0) {
+  // Trois vides différents, qui ne veulent pas dire la même chose. Les
+  // confondre ferait lire « rien n'existe » là où c'est le nœud qui n'a pas
+  // répondu, ou l'inverse.
+  if (!isDeployed) {
     return (
-      <div className="mt-8 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-20 text-center">
+      <Empty title="No launcher deployed yet">
+        This list reads the RevealLauncher contract on {activeChain.name}. None is
+        deployed, so there is nothing to read — not even an empty registry.
+      </Empty>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="mt-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed px-6 py-20 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Reading {activeChain.name}…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mt-8 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-20 text-center">
         <span className="flex size-11 items-center justify-center rounded-full border bg-card">
-          <Coins className="size-5 text-muted-foreground" />
+          <TriangleAlert className="size-5 text-muted-foreground" />
         </span>
         <div className="space-y-1">
-          <p className="font-medium">No token has launched yet</p>
-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            This list reads the launcher contract. It stays empty until the
-            first launch — yours can be it.
+          <p className="font-medium">The node did not answer</p>
+          <p className="mx-auto max-w-md text-sm text-muted-foreground">
+            This is a connection problem, not an empty launchpad — there may well
+            be tokens. {error}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/create">
-            Launch a token
-            <ArrowRight />
-          </Link>
-        </Button>
       </div>
+    );
+  }
+
+  if (launches.length === 0) {
+    return (
+      <Empty
+        title="No token has launched yet"
+        action={
+          <Button asChild>
+            <Link href="/create">
+              Launch a token
+              <ArrowRight />
+            </Link>
+          </Button>
+        }
+      >
+        The launcher is live and its registry is empty. Yours can be the first.
+      </Empty>
     );
   }
 
@@ -111,8 +158,6 @@ export function TokenBrowser({ tokens }: { tokens: Token[] }) {
         </div>
       </div>
 
-      {/* Ce que le tri courant veut dire, et ce que la recherche a retenu :
-          sans ça, un ordre qui change n'apprend rien. */}
       <p role="status" className="mt-3 text-xs text-muted-foreground">
         {shown.length} {shown.length === 1 ? "token" : "tokens"}
         {searching ? ` matching “${query.trim()}”` : ""} · {active.hint}
@@ -120,8 +165,8 @@ export function TokenBrowser({ tokens }: { tokens: Token[] }) {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <AnimatePresence mode="popLayout">
-          {shown.map((token, i) => (
-            <TokenCard key={token.slug} token={token} index={i} />
+          {shown.map((launch, i) => (
+            <TokenCard key={launch.address} launch={launch} index={i} />
           ))}
         </AnimatePresence>
 

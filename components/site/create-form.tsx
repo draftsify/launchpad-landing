@@ -20,6 +20,7 @@ import {
   activeChain,
   explorerAddress,
   explorerTx,
+  gasWithBuffer,
   isDeployed,
   LAUNCHER_ADDRESS,
 } from "@/lib/chain";
@@ -194,17 +195,30 @@ export function CreateForm() {
 
       const { encodeFunctionData } = await import("viem");
       const call = launchCall(name.trim(), ticker.trim(), metadataURI);
+      const data = encodeFunctionData({
+        abi: call.abi,
+        functionName: call.functionName,
+        args: [...call.args],
+      });
+
+      // Un lancement déploie un token, crée un pool et y écrit 120 slots
+      // d'observations : près de 10 M de gas. C'est exactement le cas où
+      // l'estimation d'un wallet tombe court et où la transaction meurt en
+      // OutOfGas après avoir été signée.
+      const gas = await gasWithBuffer({
+        account: account as `0x${string}`,
+        to: LAUNCHER_ADDRESS as `0x${string}`,
+        data,
+      });
+
       const hash = (await provider.request({
         method: "eth_sendTransaction",
         params: [
           {
             from: account,
             to: LAUNCHER_ADDRESS,
-            data: encodeFunctionData({
-              abi: call.abi,
-              functionName: call.functionName,
-              args: [...call.args],
-            }),
+            data,
+            gas: `0x${gas.toString(16)}`,
           },
         ],
       })) as `0x${string}`;
