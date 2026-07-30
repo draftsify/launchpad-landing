@@ -4,6 +4,7 @@ import { ArrowRight, Coins, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HeroBars } from "@/components/site/hero-bars";
 import { BlurIn, BlurWords } from "@/components/site/blur-in";
+import { LaunchButton } from "@/components/site/launch-button";
 
 export function Hero() {
   return (
@@ -55,12 +56,7 @@ export function Hero() {
                 See tokens
               </Link>
             </Button>
-            <Button size="lg" asChild>
-              <Link href="/create">
-                Launch a token
-                <ArrowRight />
-              </Link>
-            </Button>
+            <LaunchButton size="lg" />
           </div>
         </BlurIn>
       </div>

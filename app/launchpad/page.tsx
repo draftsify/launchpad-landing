@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 
 import { Shell } from "@/components/site/shell";
-import { Button } from "@/components/ui/button";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { BlurWords } from "@/components/site/blur-in";
 import { TokenBrowser } from "@/components/site/token-browser";
+import { LaunchButton } from "@/components/site/launch-button";
 
 export const metadata: Metadata = {
   title: "Launchpad — Reveal",
@@ -31,12 +29,7 @@ export default function LaunchpadPage() {
             </p>
           </div>
 
-          <Button asChild>
-            <Link href="/create">
-              Launch a token
-              <ArrowRight />
-            </Link>
-          </Button>
+          <LaunchButton />
         </header>
 
         <TokenBrowser />

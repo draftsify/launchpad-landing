@@ -1,17 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
-import { ArrowRight, Coins, Loader2, TriangleAlert } from "lucide-react";
+import { Coins, Loader2, TriangleAlert } from "lucide-react";
 
 import { activeChain, isDeployed } from "@/lib/chain";
 import { dailyLaunches, statsFrom } from "@/lib/analytics";
 import { formatEth } from "@/lib/format";
 import { BarChart } from "@/components/site/bar-chart";
 import { useProtocolActivity } from "@/components/site/use-activity";
-import { Button } from "@/components/ui/button";
 import { CountUp } from "@/components/site/count-up";
 import { useLaunches } from "@/components/site/use-launches";
+import { LaunchButton } from "@/components/site/launch-button";
 
 function Frame({
   children,
@@ -96,12 +95,7 @@ export function AnalyticsDashboard() {
             measure until something launches.
           </p>
         </div>
-        <Button variant="card" asChild>
-          <Link href="/create">
-            Launch a token
-            <ArrowRight />
-          </Link>
-        </Button>
+        <LaunchButton variant="card" />
       </Frame>
     );
   }

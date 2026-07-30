@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import {
   ParamTable,
   Prose,
 } from "@/components/site/docs-parts";
+import { LaunchButton } from "@/components/site/launch-button";
 import {
   ERRORS,
   EVENTS,
@@ -115,12 +115,7 @@ function launch(
                 paying for.
               </Prose>
               <div className="flex flex-wrap gap-3 pt-1">
-                <Button asChild size="sm">
-                  <Link href="/create">
-                    Launch a token
-                    <ArrowRight />
-                  </Link>
-                </Button>
+                <LaunchButton size="sm" />
                 <Button variant="card" size="sm" asChild>
                   <Link href="/how-it-works">See the mechanics</Link>
                 </Button>

@@ -3,12 +3,15 @@ import Link from "next/link";
 
 import { GithubIcon } from "@/components/github-icon";
 import { FullWidthDivider } from "@/components/full-width-divider";
+import { launchesOpen } from "@/lib/launch-gate";
 import { cn } from "@/lib/utils";
 
+// Le lien reste — il mène à une page qui explique où en est le projet — mais il
+// ne promet pas ce qu'il ne peut pas encore tenir.
 const PRODUCT = [
   { title: "Explore launches", href: "/launchpad" },
   { title: "How it works", href: "/how-it-works" },
-  { title: "Launch a token", href: "/create" },
+  { title: launchesOpen ? "Launch a token" : "Launch — not open yet", href: "/create" },
   { title: "Docs", href: "/docs" },
   { title: "Analytics", href: "/analytics" },
 ];

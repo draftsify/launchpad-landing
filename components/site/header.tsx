@@ -11,6 +11,7 @@ import { NavSearch } from "@/components/site/nav-search";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
+import { LaunchButton } from "@/components/site/launch-button";
 
 // Reprise à plat pour le menu mobile, qui n'a ni survol ni recherche.
 const MOBILE_LINKS = [
@@ -107,12 +108,7 @@ export function Header() {
             <Button variant="outline">Connect wallet</Button>
           )}
         </WalletDialog>
-        <Button asChild>
-          <Link href="/create">
-            Launch a token
-            <ArrowUpRight className="transition-transform group-hover/button:translate-x-0.5 group-hover/button:-translate-y-px" />
-          </Link>
-        </Button>
+        <LaunchButton icon={<ArrowUpRight className="transition-transform group-hover/button:translate-x-0.5 group-hover/button:-translate-y-px" />} />
       </div>
 
       {open && (
@@ -144,12 +140,7 @@ export function Header() {
                   )}
                 </Button>
               </WalletDialog>
-              <Button asChild>
-                <Link href="/create" onClick={() => setOpen(false)}>
-                  Launch a token
-                  <ArrowUpRight />
-                </Link>
-              </Button>
+              <LaunchButton icon={<ArrowUpRight />} onNavigate={() => setOpen(false)} />
             </div>
           </div>
         </div>

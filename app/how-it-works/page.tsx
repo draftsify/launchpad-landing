@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 
 import { Shell } from "@/components/site/shell";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { FullWidthDivider } from "@/components/full-width-divider";
 import { BlurWords } from "@/components/site/blur-in";
 import { StackRow } from "@/components/site/stack-row";
 import { Mechanics } from "@/components/site/mechanics";
+import { LaunchButton } from "@/components/site/launch-button";
 
 // Défini ici et non dans mechanics.tsx : une valeur exportée par un module
 // "use client" arrive au composant serveur comme référence, pas comme donnée.
@@ -136,12 +136,7 @@ export default function HowItWorksPage() {
           The same rules for every token, yours included. You pay gas.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button asChild>
-            <Link href="/create">
-              Launch a token
-              <ArrowRight />
-            </Link>
-          </Button>
+          <LaunchButton />
           <Button variant="card" asChild>
             <Link href="/launchpad">See tokens</Link>
           </Button>

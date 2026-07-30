@@ -1,17 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowRight, Coins, Loader2, Search, TriangleAlert, X } from "lucide-react";
+import { Coins, Loader2, Search, TriangleAlert, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { activeChain, isDeployed } from "@/lib/chain";
 import { matchesQuery, SORTS, sortLaunches, type SortId } from "@/lib/tokens";
+import { launchesOpen } from "@/lib/launch-gate";
 import { Button } from "@/components/ui/button";
 import { TokenCard } from "@/components/site/token-card";
 import { useActivityByToken } from "@/components/site/use-activity";
 import { useLaunches } from "@/components/site/use-launches";
 import { cn } from "@/lib/utils";
+import { LaunchButton } from "@/components/site/launch-button";
 
 function Empty({
   title,
@@ -99,12 +100,7 @@ export function TokenBrowser() {
       <Empty
         title="No token has launched yet"
         action={
-          <Button asChild>
-            <Link href="/create">
-              Launch a token
-              <ArrowRight />
-            </Link>
-          </Button>
+          <LaunchButton />
         }
       >
         The launcher is live and its registry is empty. Yours can be the first.
@@ -206,17 +202,16 @@ export function TokenBrowser() {
               <Coins className="size-5 text-muted-foreground" />
             </span>
             <div className="space-y-1">
-              <p className="font-medium">Your token here</p>
+              <p className="font-medium">
+                {launchesOpen ? "Your token here" : "Not open yet"}
+              </p>
               <p className="mx-auto max-w-xs text-sm text-muted-foreground">
-                Name it, add an image, launch. You pay gas.
+                {launchesOpen
+                  ? "Name it, add an image, launch. You pay gas."
+                  : "Creation opens once Reveal is deployed. The rules are already fixed."}
               </p>
             </div>
-            <Button variant="card" asChild>
-              <Link href="/create">
-                Launch a token
-                <ArrowRight />
-              </Link>
-            </Button>
+            <LaunchButton variant="card" />
           </motion.div>
         )}
       </div>

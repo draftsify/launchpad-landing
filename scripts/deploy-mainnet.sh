@@ -33,17 +33,11 @@ EXPLORER=https://robinhoodchain.blockscout.com
 # Des tests explicites plutôt que ${VAR:?message} : bash continue de parser le
 # message d'une expansion, donc une apostrophe dans « l'adresse » y ouvre une
 # quote et casse le fichier entier. Vu, sur ce script.
-# Aucune trésorerie par défaut. Il y en a eu une, retirée quand il est apparu
-# que sa clé privée avait été collée dans une conversation : une trésorerie
-# immuable dont la clé circule revient à offrir les frais au premier lecteur.
-# La redemander à chaque fois coûte une variable ; s'être trompé coûte tout.
-if [ -z "${TREASURY:-}" ]; then
-  echo "TREASURY manquant : adresse qui recevra les frais, en 0x + 40 hex." >&2
-  echo "  Elle est gravée pour toujours. Elle doit appartenir à un wallet" >&2
-  echo "  dont la clé privée n'a jamais été partagée, collée ni exportée." >&2
-  echo "  TREASURY=0x… ACCOUNT=deployer bash scripts/deploy-mainnet.sh" >&2
-  exit 1
-fi
+# La trésorerie vit dans script/Deploy.s.sol, versionnée. Reprise ici pour être
+# affichée avant d'être gravée : passer TREASURY= la remplace, ce qui reste
+# possible mais doit être un geste délibéré — et exige d'avoir vérifié que la
+# clé de l'adresse n'a jamais été partagée, collée ni exportée.
+TREASURY="${TREASURY:-0xa40679bC2f4f5B51Edb05E7A2D573292A3479c62}"
 if [ -z "${ACCOUNT:-}" ]; then
   echo "ACCOUNT manquant : nom du keystore, par exemple ACCOUNT=deployer." >&2
   echo "  Le créer une fois : cast wallet import deployer --interactive" >&2
