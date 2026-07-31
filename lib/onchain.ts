@@ -177,6 +177,89 @@ export async function readCreatorBuyCap(): Promise<bigint | null> {
   });
 }
 
+/** L'adresse qui reçoit les frais. Immuable, donc lue une fois. */
+export async function readTreasury(): Promise<`0x${string}` | null> {
+  if (!isDeployed) return null;
+  const locker = await publicClient.readContract({
+    address: LAUNCHER_ADDRESS as `0x${string}`,
+    abi: launcherAbi,
+    functionName: "locker",
+  });
+  return publicClient.readContract({
+    address: locker,
+    abi: lockerAbi,
+    functionName: "treasury",
+  });
+}
+
+export type Claimable = {
+  address: `0x${string}`;
+  name: string;
+  symbol: string;
+  /** Quote due à la trésorerie, en wei. */
+  quote: bigint;
+  /** Tokens dus à la trésorerie, en wei. */
+  token: bigint;
+};
+
+/**
+ * Ce que la position de chaque lancement doit à la trésorerie, maintenant.
+ *
+ * `owedRecorded` ne sert pas ici : le PositionManager n'inscrit les frais dus
+ * qu'au moment où la position est touchée, donc il rend zéro tant que personne
+ * n'a collecté — quel qu'ait été le volume. Mesuré sur un lancement réel :
+ * `owedRecorded` disait 0/0 pendant qu'une collecte rendait 0,099 ETH.
+ *
+ * On simule donc `collect` en lecture seule. La simulation traverse le même
+ * chemin que la vraie transaction, poke comprise, et rend les montants exacts.
+ */
+export async function readClaimable(): Promise<Claimable[]> {
+  if (!isDeployed) return [];
+
+  const locker = await publicClient.readContract({
+    address: LAUNCHER_ADDRESS as `0x${string}`,
+    abi: launcherAbi,
+    functionName: "locker",
+  });
+  const launches = await readLaunches();
+
+  const rows = await Promise.all(
+    launches.map(async (launch) => {
+      try {
+        const [position, simulated] = await Promise.all([
+          publicClient.readContract({
+            address: locker,
+            abi: lockerAbi,
+            functionName: "positions",
+            args: [launch.address],
+          }),
+          publicClient.simulateContract({
+            address: locker,
+            abi: lockerAbi,
+            functionName: "collect",
+            args: [launch.address],
+          }),
+        ]);
+
+        const quoteIsToken0 = position[6];
+        const [amount0, amount1] = simulated.result;
+        return {
+          address: launch.address,
+          name: launch.name,
+          symbol: launch.symbol,
+          quote: quoteIsToken0 ? amount0 : amount1,
+          token: quoteIsToken0 ? amount1 : amount0,
+        };
+      } catch {
+        // Un token illisible ne doit pas emporter la liste entière.
+        return null;
+      }
+    })
+  );
+
+  return rows.filter((row): row is Claimable => row !== null);
+}
+
 export async function readLaunchBySlug(slug: string): Promise<Launch | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(slug)) return null;
   // Masqué de la liste veut dire masqué de son adresse directe : sinon un lien

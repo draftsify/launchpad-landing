@@ -1,0 +1,223 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Coins, Loader2 } from "lucide-react";
+import { encodeFunctionData, formatEther } from "viem";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { useWallet } from "@/components/site/wallet-provider";
+import {
+  activeChain,
+  explorerTx,
+  gasWithBuffer,
+  isDeployed,
+  LAUNCHER_ADDRESS,
+  publicClient,
+} from "@/lib/chain";
+import { launcherAbi, lockerAbi } from "@/lib/launcher";
+import { formatTokens } from "@/lib/format";
+import { readClaimable, readTreasury, type Claimable } from "@/lib/onchain";
+
+/** Un montant en ETH lisible, tronqué plutôt qu'arrondi. */
+function eth(wei: bigint, decimals = 4) {
+  const [whole, frac = ""] = formatEther(wei).split(".");
+  const cut = frac.slice(0, decimals).replace(/0+$/, "");
+  return cut ? `${whole}.${cut}` : whole;
+}
+
+/**
+ * Collecte des frais du protocole, à côté du wallet.
+ *
+ * Visible seulement pour la trésorerie, et il faut être précis sur pourquoi :
+ * `collect` est **permissionless**, donc n'importe qui peut le déclencher —
+ * c'est délibéré, la collecte ne doit dépendre de personne. Mais elle envoie
+ * toujours à l'adresse inscrite dans le constructeur du locker, jamais à qui
+ * appelle. Un bouton « réclamer » proposé à tout visiteur laisserait croire que
+ * quelque chose lui revient. Il n'apparaît donc que pour l'adresse concernée.
+ *
+ * Les montants viennent d'une simulation de `collect`, pas de `owedRecorded` :
+ * le PositionManager n'inscrit les frais dus qu'au moment où on touche la
+ * position, donc la vue rend zéro tant que personne n'a collecté, quel qu'ait
+ * été le volume.
+ */
+export function TreasuryFees() {
+  const { account, onCorrectChain, switchChain } = useWallet();
+  const [treasury, setTreasury] = useState<`0x${string}` | null>(null);
+  const [rows, setRows] = useState<Claimable[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; hash?: string } | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    readTreasury()
+      .then((found) => alive && setTreasury(found))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const isTreasury =
+    !!account && !!treasury && account.toLowerCase() === treasury.toLowerCase();
+
+  const refresh = useCallback(() => {
+    if (!isTreasury) return;
+    setRows(null);
+    readClaimable()
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, [isTreasury]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function collect(token: `0x${string}`) {
+    const provider = window.ethereum;
+    if (!provider || !account) return;
+    if (!onCorrectChain && !(await switchChain())) return;
+
+    setNote(null);
+    setBusy(token);
+    try {
+      const locker = await publicClient.readContract({
+        address: LAUNCHER_ADDRESS as `0x${string}`,
+        abi: launcherAbi,
+        functionName: "locker",
+      });
+      const data = encodeFunctionData({
+        abi: lockerAbi,
+        functionName: "collect",
+        args: [token],
+      });
+      const gas = await gasWithBuffer({
+        account: account as `0x${string}`,
+        to: locker,
+        data,
+      });
+
+      const hash = (await provider.request({
+        method: "eth_sendTransaction",
+        params: [
+          { from: account, to: locker, data, gas: `0x${gas.toString(16)}` },
+        ],
+      })) as `0x${string}`;
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      setNote({
+        text: receipt.status === "success" ? "Collected." : "The transaction reverted.",
+        hash,
+      });
+      refresh();
+    } catch (error) {
+      const message =
+        (error as { shortMessage?: string })?.shortMessage ??
+        (error as Error)?.message ??
+        "Something went wrong";
+      setNote({ text: message.slice(0, 140) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!isDeployed || !isTreasury) return null;
+
+  const pending = rows?.reduce((sum, row) => sum + row.quote, 0n) ?? 0n;
+  const withFees = rows?.filter((row) => row.quote > 0n || row.token > 0n) ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="card" size="sm" onClick={refresh}>
+          <Coins />
+          {rows === null ? "Fees" : `${eth(pending)} ETH`}
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Protocol fees</DialogTitle>
+          <DialogDescription>
+            Swap fees accrued to each locked position. Collecting always pays the
+            treasury written into the locker — this button only triggers it, and
+            so could anyone.
+          </DialogDescription>
+        </DialogHeader>
+
+        {rows === null ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Reading {activeChain.name}…
+          </div>
+        ) : withFees.length === 0 ? (
+          <p className="py-6 text-sm text-muted-foreground">
+            Nothing to collect yet. Fees appear here as soon as a pool is traded.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {withFees.map((row) => (
+              <li
+                key={row.address}
+                className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <p className="truncate text-sm font-medium">
+                    {row.name}{" "}
+                    <span className="text-muted-foreground">{row.symbol}</span>
+                  </p>
+                  <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                    {eth(row.quote, 6)} ETH
+                    {row.token > 0n &&
+                      ` · ${formatTokens(Number(row.token) / 1e18)} ${row.symbol}`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={busy !== null}
+                  onClick={() => collect(row.address)}
+                >
+                  {busy === row.address ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    "Collect"
+                  )}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {note && (
+          <p className="text-xs text-muted-foreground">
+            {note.text}{" "}
+            {note.hash && explorerTx(note.hash) && (
+              <a
+                href={explorerTx(note.hash)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Transaction
+              </a>
+            )}
+          </p>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          Fees are paid in both sides of the pair, so a collection returns ETH
+          and tokens. The tokens land in the treasury as an ordinary position —
+          the protocol is subject to its own unlock schedule.
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
