@@ -355,11 +355,20 @@ export function CreateForm() {
   // Le libellé et l'état désactivé doivent découler de la même condition :
   // proposer « changer de réseau » sur un bouton grisé n'a aucun sens.
   const needsChain = isDeployed && chainId !== null && !onCorrectChain;
+  /**
+   * Le libellé porte le montant du dev buy quand il y en a un.
+   *
+   * C'est le dernier endroit qu'on lit avant de signer, et la seule chose que
+   * cette transaction dépense au-delà du gas. Un bouton qui dit « Launch token »
+   * alors qu'il va sortir 0,01 ETH du wallet cache la partie qui coûte.
+   */
   const ctaLabel = working
     ? status.step
     : needsChain
       ? `Switch to ${activeChain.name}`
-      : "Launch token";
+      : devBuyWei > 0n
+        ? `Launch + buy ${ethLabel(devBuyWei, 6)} ETH`
+        : "Launch token";
   const metadataBytes = byteLength(
     toDataUri({
       name: name.trim(),
@@ -700,6 +709,30 @@ export function CreateForm() {
               >
                 {ctaLabel}
               </Button>
+            )}
+
+            {/* Ce que la transaction sort du wallet, à côté du bouton qui la
+                signe — pas seulement dans la section qui l'a réglé. */}
+            {devBuyWei > 0n && !devBuyTooLarge && (
+              <div className="space-y-1 rounded-xl border bg-muted/30 p-3 text-xs">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-muted-foreground">Dev buy</span>
+                  <span className="font-mono tabular-nums">
+                    {ethLabel(devBuyWei, 6)} ETH
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-muted-foreground">You receive</span>
+                  <span className="font-mono tabular-nums">
+                    ≈ {formatTokens(Number(devBuyEstimate) / 1e18)} (
+                    {devBuyShare.toFixed(2)}%)
+                  </span>
+                </div>
+                <p className="pt-1 text-muted-foreground">
+                  Locked like any other buy: {rules.initialUnlock}% sellable at
+                  once, all of it after {formatDuration(rules.unlockHours)}.
+                </p>
+              </div>
             )}
 
             {status.kind === "done" ? (
