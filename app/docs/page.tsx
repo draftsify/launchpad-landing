@@ -352,9 +352,21 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
 
             <DocSection
               id="graduation"
-              title="Graduation"
+              title="Revealed"
               lede="A milestone the pool reaches. Not a migration, and not a promise."
             >
+              <Prose>
+                A launch past the threshold is shown as{" "}
+                <strong className="font-medium text-foreground">Revealed</strong>
+                . The contracts call the same thing{" "}
+                <Inline>graduation</Inline> — <Inline>graduated</Inline>,{" "}
+                <Inline>graduationProgress</Inline>,{" "}
+                <Inline>GRADUATION_QUOTE</Inline> — and those names are
+                immutable, so an integration should expect them. The word
+                differs on purpose: on most launchpads graduating is when
+                liquidity migrates somewhere else, and borrowing the term would
+                borrow the expectation.
+              </Prose>
               <ParamTable params={GRADUATION_PARAMS} />
               <Prose>
                 At {GRADUATION_QUOTE_ETH} ETH the launch is called graduated.

@@ -42,7 +42,7 @@ export const DOC_NAV: DocGroup[] = [
     items: [
       { id: "unlock", label: "Unlock schedule", icon: Timer },
       { id: "relief", label: "Drawdown relief", icon: CircleDot },
-      { id: "graduation", label: "Graduation", icon: SlidersHorizontal },
+      { id: "graduation", label: "Revealed", icon: SlidersHorizontal },
       { id: "antisniper", label: "Anti-sniper", icon: ShieldCheck },
       { id: "devbuy", label: "Dev buy", icon: Coins },
     ],

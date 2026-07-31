@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import type { TokenActivity } from "@/lib/activity";
 import { formatAge, formatValue } from "@/lib/format";
 import { useEthPrice } from "@/components/site/use-eth-price";
+import { RevealedBadge } from "@/components/site/revealed-badge";
 import { slugOf, type Launch } from "@/lib/onchain";
 import { CopyAddress } from "@/components/site/copy-address";
 import { TokenMark } from "@/components/site/token-mark";
@@ -87,8 +88,9 @@ export function TokenCard({
                   className="size-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:text-foreground group-hover:opacity-100"
                 />
               </p>
-              <p className="font-mono text-xs text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
                 ${launch.symbol}
+                {launch.revealed && <RevealedBadge />}
               </p>
             </div>
 

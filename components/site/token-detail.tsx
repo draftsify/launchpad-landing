@@ -14,6 +14,7 @@ import { useActivity } from "@/components/site/use-activity";
 import { TokenMark } from "@/components/site/token-mark";
 import { TradePanel } from "@/components/site/trade-panel";
 import { GraduationCard } from "@/components/site/graduation-card";
+import { RevealedBadge } from "@/components/site/revealed-badge";
 import { hiddenReason, linksMuted } from "@/lib/hidden";
 import { useLaunch } from "@/components/site/use-launches";
 import { useRules } from "@/components/site/use-rules";
@@ -170,6 +171,7 @@ export function TokenDetail({ slug }: { slug: string }) {
               <span className="font-mono text-sm text-muted-foreground">
                 ${launch.symbol}
               </span>
+              {launch.revealed && <RevealedBadge />}
             </div>
 
             {meta?.description && (

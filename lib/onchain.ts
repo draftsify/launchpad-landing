@@ -41,6 +41,15 @@ export type Launch = {
   /** Quote réellement dans le pool : ce que les acheteurs y ont mis. */
   liquidityEth: number;
   meta: TokenMetadata | null;
+  /**
+   * Le jalon est atteint : le lancement est « Revealed ».
+   *
+   * Mesuré sur la position, pas sur le drapeau `graduated` du locker. Ce
+   * drapeau est collant et n'est écrit que si quelqu'un appelle
+   * `syncGraduation` — un token peut donc avoir franchi le seuil sans que le
+   * drapeau le dise, et afficher « pas encore » serait alors faux.
+   */
+  revealed: boolean;
 };
 
 /** Segment d'URL. L'adresse, pas un nom : deux tokens peuvent s'appeler pareil. */
@@ -92,6 +101,9 @@ async function readLaunch(address: `0x${string}`): Promise<Launch | null> {
       marketCapEth: priceEth * Number(formatEther(supply)),
       liquidityEth: Number(formatEther(quoteReserve)),
       meta: parseMetadata(metadataURI),
+      // Renseigné par l'appelant, qui connaît le locker. Faux par défaut : un
+      // jalon qu'on n'a pas lu ne s'annonce pas comme atteint.
+      revealed: false,
     };
   } catch {
     // Un token illisible ne doit pas emporter la liste entière.
@@ -127,9 +139,11 @@ export async function readLaunches(): Promise<Launch[]> {
   );
 
   const launches = await Promise.all(addresses.map(readLaunch));
-  return launches
-    .filter((l): l is Launch => l !== null && !isHidden(l.address))
-    .sort((a, b) => b.launchedAt - a.launchedAt);
+  return markRevealed(
+    launches
+      .filter((l): l is Launch => l !== null && !isHidden(l.address))
+      .sort((a, b) => b.launchedAt - a.launchedAt)
+  );
 }
 
 /**
@@ -175,6 +189,50 @@ export async function readCreatorBuyCap(): Promise<bigint | null> {
     abi: launcherAbi,
     functionName: "creatorBuyCap",
   });
+}
+
+/**
+ * Marque les lancements qui ont franchi le seuil.
+ *
+ * Une lecture du seuil pour tout le monde, puis une par token. C'est le prix
+ * d'un statut exact : le drapeau `graduated` du contrat coûterait le même
+ * nombre d'appels et rendrait faux tant que personne n'a appelé
+ * `syncGraduation`.
+ */
+async function markRevealed(launches: Launch[]): Promise<Launch[]> {
+  if (launches.length === 0) return launches;
+
+  try {
+    const locker = await publicClient.readContract({
+      address: LAUNCHER_ADDRESS as `0x${string}`,
+      abi: launcherAbi,
+      functionName: "locker",
+    });
+    const threshold = await publicClient.readContract({
+      address: locker,
+      abi: lockerAbi,
+      functionName: "GRADUATION_QUOTE",
+    });
+
+    return await Promise.all(
+      launches.map(async (launch) => {
+        try {
+          const progress = await publicClient.readContract({
+            address: locker,
+            abi: lockerAbi,
+            functionName: "graduationProgress",
+            args: [launch.address],
+          });
+          return { ...launch, revealed: progress >= threshold };
+        } catch {
+          return launch;
+        }
+      })
+    );
+  } catch {
+    // Le jalon n'est pas lisible : on n'annonce rien plutôt que d'annoncer non.
+    return launches;
+  }
 }
 
 /** L'adresse qui reçoit les frais. Immuable, donc lue une fois. */
@@ -265,7 +323,9 @@ export async function readLaunchBySlug(slug: string): Promise<Launch | null> {
   // Masqué de la liste veut dire masqué de son adresse directe : sinon un lien
   // partagé continue de servir la page, et le retrait n'en est pas un.
   if (isHidden(slug)) return null;
-  return readLaunch(slug.toLowerCase() as `0x${string}`);
+  const launch = await readLaunch(slug.toLowerCase() as `0x${string}`);
+  if (!launch) return null;
+  return (await markRevealed([launch]))[0];
 }
 
 /** Ce que le locker dit d'un lancement : jalon, et propriété de la position. */

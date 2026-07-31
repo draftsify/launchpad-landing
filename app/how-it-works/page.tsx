@@ -21,8 +21,8 @@ const RULES = [
     body: "Drawdown raises the floor, whatever the clock says: down 20% releases about a third of a position, down 40% about three quarters, and a halved price releases all of it. It is a floor and never a bonus — being in profit costs nothing.",
   },
   {
-    title: "Graduation moves nothing",
-    body: "At 4.2 ETH a launch is called graduated. Same token, same pool, same locked liquidity — it is a milestone, not a migration, and not a promise.",
+    title: "Revealed moves nothing",
+    body: "At 4.2 ETH a launch is marked Revealed. Same token, same pool, same locked liquidity — elsewhere this is where liquidity migrates, here the word only means the threshold was crossed. A milestone, not a promise.",
   },
 ];
 

@@ -54,7 +54,7 @@ export function GraduationCard({ launch }: { launch: Launch }) {
         <div className="space-y-1">
           <p className="flex items-center gap-2 text-sm font-medium">
             <GraduationCap aria-hidden className="size-4 text-muted-foreground" />
-            {done ? "Graduated" : "Progress to graduation"}
+            {done ? "Revealed" : "Progress to Revealed"}
           </p>
           <p className="text-xs text-muted-foreground">
             {progress === null
@@ -82,11 +82,13 @@ export function GraduationCard({ launch }: { launch: Launch }) {
         <Lock aria-hidden className="mt-0.5 size-3.5 shrink-0" />
         <span>
           <strong className="font-medium text-foreground">
-            Graduation is not migration.
+            Revealed is not a migration.
           </strong>{" "}
           Nothing moves when it happens: same token, same pool, same fee tier,
-          same locked position, same rules. It is a milestone, not a quality
-          signal, and it guarantees no exit at any price.
+          same locked position, same rules. Other launchpads move liquidity at
+          this point — here the word only means the threshold was crossed. It is
+          not a quality signal, and it guarantees no exit at any price. The
+          contract calls it <span className="font-mono">graduation</span>.
         </span>
       </p>
     </div>
