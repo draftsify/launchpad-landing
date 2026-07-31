@@ -188,29 +188,33 @@ export function CreateForm() {
   const [devBuy, setDevBuy] = useState("");
 
   /**
-   * Le plafond vient du launcher, pas d'ici. La constante du dépôt sert de
-   * première réponse le temps que la chaîne parle — même arbitrage que pour les
-   * règles : c'est le contrat qui applique.
+   * Le plafond vient du launcher, pas d'ici — et sa seule lisibilité dit si ce
+   * launcher connaît le dev buy.
+   *
+   * `creatorBuyCap()` n'existe pas sur un launcher antérieur : l'appel échoue,
+   * et l'onglet reste caché. C'est ce qui permet de déployer cette interface
+   * sans attendre le contrat — proposer un bouton qui ne peut que revert serait
+   * pire que de ne rien proposer. Le jour où le launcher répond, l'onglet
+   * apparaît de lui-même.
    */
-  const [cap, setCap] = useState<bigint>(
-    (SUPPLY_GUESS * BigInt(CREATOR_BUY_MAX_PERCENT)) / 100n
-  );
+  const [cap, setCap] = useState<bigint | null>(null);
   useEffect(() => {
     let alive = true;
     readCreatorBuyCap()
       .then((onchain) => {
-        if (alive && onchain) setCap(onchain);
+        if (alive && onchain && onchain > 0n) setCap(onchain);
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
+  const devBuySupported = cap !== null;
 
-  const maxDevBuyWei = maxCreatorBuyQuote(cap);
+  const maxDevBuyWei = maxCreatorBuyQuote(cap ?? 0n);
   // Une saisie en cours — « 0. », « », « abc » — ne doit pas casser le rendu.
   const devBuyWei = (() => {
-    if (!devBuyOn) return 0n;
+    if (!devBuyOn || !devBuySupported) return 0n;
     try {
       const parsed = parseEther(devBuy.trim() || "0");
       return parsed > 0n ? parsed : 0n;
@@ -569,6 +573,7 @@ export function CreateForm() {
           </p>
         </Section>
 
+        {devBuySupported && (
         <Section
           step="04"
           title="Dev buy"
@@ -670,6 +675,7 @@ export function CreateForm() {
             </p>
           )}
         </Section>
+        )}
       </form>
 
       {/* ------------------------------ preview ----------------------------- */}
