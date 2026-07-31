@@ -9,6 +9,7 @@ export const launcherAbi = parseAbi([
   // transaction. `value` porte le montant : il n'y a pas de paramètre pour ça.
   "function launchWithBuy(string name, string symbol, string metadataURI) payable returns (address token, address pool)",
   "function creatorBuyCap() view returns (uint256)",
+  "function quote() view returns (address)",
   "function tokenCount() view returns (uint256)",
   "function tokens(uint256) view returns (address)",
   "function supply() view returns (uint256)",

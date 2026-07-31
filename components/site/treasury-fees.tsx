@@ -23,8 +23,15 @@ import {
   publicClient,
 } from "@/lib/chain";
 import { launcherAbi, lockerAbi } from "@/lib/launcher";
+import { parseAbi } from "viem";
 import { formatTokens } from "@/lib/format";
 import { readClaimable, readTreasury, type Claimable } from "@/lib/onchain";
+
+/** WETH : `withdraw` rend l'ETH natif, un pour un, sans frais ni glissement. */
+const wethAbi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function withdraw(uint256 amount)",
+]);
 
 /** Un montant en ETH lisible, tronqué plutôt qu'arrondi. */
 function eth(wei: bigint, decimals = 4) {
@@ -55,6 +62,10 @@ export function TreasuryFees() {
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; hash?: string } | null>(null);
   const [open, setOpen] = useState(false);
+  /** WETH détenu par le wallet connecté, s'il y en a. */
+  const [wrapped, setWrapped] = useState<{ token: `0x${string}`; balance: bigint } | null>(
+    null
+  );
 
   useEffect(() => {
     let alive = true;
@@ -75,7 +86,78 @@ export function TreasuryFees() {
     readClaimable()
       .then(setRows)
       .catch(() => setRows([]));
+
+    /**
+     * Le WETH du wallet, parce que c'est ce que la collecte rend.
+     *
+     * Uniswap règle ses frais dans les deux jetons de la paire, donc la part
+     * « ETH » arrive en **WETH** : un ERC-20, que MetaMask n'affiche pas tant
+     * qu'on ne l'a pas ajouté. Une collecte réussie ressemble donc à une
+     * collecte sans effet. Le solde est affiché ici, et un bouton le
+     * déballe.
+     */
+    publicClient
+      .readContract({
+        address: LAUNCHER_ADDRESS as `0x${string}`,
+        abi: launcherAbi,
+        functionName: "quote",
+      })
+      .then(async (token) => {
+        const balance = await publicClient.readContract({
+          address: token,
+          abi: wethAbi,
+          functionName: "balanceOf",
+          args: [account as `0x${string}`],
+        });
+        setWrapped({ token, balance });
+      })
+      .catch(() => setWrapped(null));
   }, [account]);
+
+  async function unwrap() {
+    const provider = window.ethereum;
+    if (!provider || !account || !wrapped || wrapped.balance === 0n) return;
+    if (!onCorrectChain && !(await switchChain())) return;
+
+    setNote(null);
+    setBusy("unwrap");
+    try {
+      const data = encodeFunctionData({
+        abi: wethAbi,
+        functionName: "withdraw",
+        args: [wrapped.balance],
+      });
+      const gas = await gasWithBuffer({
+        account: account as `0x${string}`,
+        to: wrapped.token,
+        data,
+      });
+      const hash = (await provider.request({
+        method: "eth_sendTransaction",
+        params: [
+          { from: account, to: wrapped.token, data, gas: `0x${gas.toString(16)}` },
+        ],
+      })) as `0x${string}`;
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      setNote({
+        text:
+          receipt.status === "success"
+            ? "Unwrapped to native ETH."
+            : "The transaction reverted.",
+        hash,
+      });
+      refresh();
+    } catch (error) {
+      const message =
+        (error as { shortMessage?: string })?.shortMessage ??
+        (error as Error)?.message ??
+        "Something went wrong";
+      setNote({ text: message.slice(0, 140) });
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     refresh();
@@ -143,8 +225,11 @@ export function TreasuryFees() {
 
   const pending = rows?.reduce((sum, row) => sum + row.quote, 0n) ?? 0n;
   const withFees = rows?.filter((row) => row.quote > 0n || row.token > 0n) ?? [];
-  // Rien à collecter et rien en cours de lecture : pas de bouton pour rien.
-  if (rows !== null && withFees.length === 0) return null;
+  // Rien à collecter, et rien à déballer : pas de bouton pour rien. Le WETH
+  // compte, sinon le bouton disparaîtrait juste après une collecte réussie —
+  // au moment précis où il faut pouvoir en faire quelque chose.
+  const hasWrapped = (wrapped?.balance ?? 0n) > 0n;
+  if (rows !== null && withFees.length === 0 && !hasWrapped) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -234,10 +319,37 @@ export function TreasuryFees() {
           </p>
         )}
 
+        {wrapped && wrapped.balance > 0n && (
+          <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">
+                  {eth(wrapped.balance, 6)} WETH in this wallet
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Wrapped ETH is an ERC-20, so a wallet only shows it once the
+                  token is added. This is where a collection lands.
+                </p>
+              </div>
+              <Button size="sm" disabled={busy !== null} onClick={unwrap}>
+                {busy === "unwrap" ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  "Unwrap"
+                )}
+              </Button>
+            </div>
+            <p className="font-mono text-[11px] break-all text-muted-foreground">
+              {wrapped.token}
+            </p>
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground">
-          Fees are paid in both sides of the pair, so a collection returns ETH
-          and tokens. The tokens land in the treasury as an ordinary position —
-          the protocol is subject to its own unlock schedule.
+          Fees are paid in both sides of the pair, so a collection returns
+          wrapped ETH and tokens. The tokens land as an ordinary position — the
+          protocol is subject to its own unlock schedule, a tenth at once and
+          all of it fifteen minutes later.
         </p>
       </DialogContent>
     </Dialog>
