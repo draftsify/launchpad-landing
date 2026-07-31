@@ -112,7 +112,7 @@ echo
 printf '  \033[1mtrésorerie : %s\033[0m\n' "$TREASURY"
 echo "  ^ immuable. Vérifiez-la caractère par caractère avant de continuer."
 echo
-echo "  frais      : 100 % à la trésorerie, aucune part créateur"
+echo "  frais      : quote à la trésorerie, tokens au créateur du lancement"
 echo "  règles     : 10 % vendable au lancement, tout ouvert en 1 h,"
 echo "               délai anti-sniper 5 s, rampe d'achat 10 min"
 echo "  courbe     : ticks -204200/887200, liquidité 36819258015569838458222"

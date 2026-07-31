@@ -68,7 +68,25 @@ contract RevealLocker {
         int24 tickUpper,
         uint128 liquidity
     );
-    event Collected(address indexed token, uint256 amount0, uint256 amount1);
+    /**
+     * Marqueur de comportement, lisible avant toute collecte.
+     *
+     * Le locker précédent envoyait les deux côtés à la trésorerie et n'expose
+     * pas cette constante : un appel y échoue. Une interface peut donc savoir à
+     * quel contrat elle parle sans le deviner à l'adresse, et décrire le partage
+     * seulement là où il existe. Annoncer une part créateur sur un contrat qui
+     * n'en verse pas serait la pire des deux erreurs possibles.
+     */
+    bool public constant SPLITS_FEES = true;
+
+    /**
+     * Une collecte, et où chaque côté est allé. Les noms disent le destinataire
+     * plutôt que l'ordre des jetons dans la paire : `amount0`/`amount1`
+     * obligeaient tout lecteur à retrouver lequel des deux était la quote.
+     */
+    event Collected(
+        address indexed token, uint256 quoteToTreasury, uint256 tokensToCreator
+    );
     event Graduated(address indexed token, address indexed pool, uint256 quoteAmount);
 
     error OnlyLauncher();
@@ -144,7 +162,28 @@ contract RevealLocker {
     // ----------------------------------------------------------------- frais
 
     /**
-     * Verse les frais accumulés à la trésorerie. Appelable par n'importe qui.
+     * Verse les frais accumulés. Appelable par n'importe qui.
+     *
+     * **Chaque côté va à un destinataire différent** : la quote à la trésorerie,
+     * les tokens au créateur du lancement. Uniswap prélève sa commission sur le
+     * jeton *entrant* de chaque échange — un achat paie en quote, une vente paie
+     * en token — donc ce partage suit la nature de ce qui a été gagné plutôt
+     * qu'un pourcentage décidé à l'avance.
+     *
+     * Deux appels et non un, parce que `CollectParams` ne porte qu'un
+     * destinataire mais deux plafonds : en mettre un à zéro ne collecte que
+     * l'autre côté. La conséquence est ce qui rend ce partage possible — les
+     * tokens vont **du pool au créateur directement**. Ce contrat ne les détient
+     * à aucun instant, donc il n'a jamais à sortir d'une position, donc il n'a
+     * besoin d'aucune dispense du verrou que le protocole impose à tous.
+     *
+     * Corollaire voulu : les tokens ainsi reçus ouvrent chez le créateur une
+     * position ordinaire. Il est verrouillé comme n'importe quel acheteur, et
+     * une collecte rajeunit sa part encore bloquée, exactement comme un rachat.
+     *
+     * Autre corollaire, et c'est le plus utile : la trésorerie est payée par
+     * *n'importe quelle* collecte, y compris celle qu'un créateur déclenche pour
+     * lui-même. Elle n'a rien à réclamer.
      *
      * `collect` du PositionManager matérialise les frais dus par un `burn` à
      * zéro puis les transfère : la liquidité de la position est arithmétiquement
@@ -154,20 +193,34 @@ contract RevealLocker {
     function collect(address token)
         external
         nonReentrant
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint256 quoteToTreasury, uint256 tokensToCreator)
     {
         Position memory p = positions[token];
         if (p.pool == address(0)) revert UnknownToken();
 
-        (amount0, amount1) = positionManager.collect(
+        uint128 all = type(uint128).max;
+
+        (uint256 q0, uint256 q1) = positionManager.collect(
             INonfungiblePositionManager.CollectParams({
                 tokenId: p.tokenId,
                 recipient: treasury,
-                amount0Max: type(uint128).max,
-                amount1Max: type(uint128).max
+                amount0Max: p.quoteIsToken0 ? all : 0,
+                amount1Max: p.quoteIsToken0 ? 0 : all
             })
         );
-        emit Collected(token, amount0, amount1);
+        quoteToTreasury = p.quoteIsToken0 ? q0 : q1;
+
+        (uint256 t0, uint256 t1) = positionManager.collect(
+            INonfungiblePositionManager.CollectParams({
+                tokenId: p.tokenId,
+                recipient: p.creator,
+                amount0Max: p.quoteIsToken0 ? 0 : all,
+                amount1Max: p.quoteIsToken0 ? all : 0
+            })
+        );
+        tokensToCreator = p.quoteIsToken0 ? t1 : t0;
+
+        emit Collected(token, quoteToTreasury, tokensToCreator);
     }
 
     /**

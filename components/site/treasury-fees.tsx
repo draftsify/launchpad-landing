@@ -28,6 +28,7 @@ import { formatTokens } from "@/lib/format";
 import {
   readClaimable,
   readHoldings,
+  readSplitsFees,
   readTreasury,
   type Claimable,
   type Holding,
@@ -48,14 +49,17 @@ function eth(wei: bigint, decimals = 4) {
 }
 
 /**
- * Collecte des frais du protocole, à côté du wallet.
+ * Collecte des frais, à côté du wallet.
  *
- * Visible seulement pour la trésorerie, et il faut être précis sur pourquoi :
- * `collect` est **permissionless**, donc n'importe qui peut le déclencher —
- * c'est délibéré, la collecte ne doit dépendre de personne. Mais elle envoie
- * toujours à l'adresse inscrite dans le constructeur du locker, jamais à qui
- * appelle. Un bouton « réclamer » proposé à tout visiteur laisserait croire que
- * quelque chose lui revient. Il n'apparaît donc que pour l'adresse concernée.
+ * Deux publics depuis que le locker partage par côté : la trésorerie, qui reçoit
+ * la quote, et les créateurs, qui reçoivent les tokens de leurs lancements. Le
+ * bouton n'apparaît que pour eux — `collect` reste appelable par n'importe qui,
+ * mais proposer « réclamer » à un visiteur laisserait croire qu'une part lui
+ * revient.
+ *
+ * Ce qui rend la trésorerie automatique : une seule transaction paie les deux
+ * destinataires. Un créateur qui réclame sa part verse la quote au protocole
+ * sans même le savoir, et le protocole n'a rien à déclencher.
  *
  * Les montants viennent d'une simulation de `collect`, pas de `owedRecorded` :
  * le PositionManager n'inscrit les frais dus qu'au moment où on touche la
@@ -75,6 +79,18 @@ export function TreasuryFees() {
   );
   /** Les tokens recus en frais, avec ce qui peut sortir maintenant. */
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  /** Le locker déployé partage-t-il les frais par côté ? */
+  const [splits, setSplits] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    readSplitsFees()
+      .then((found) => alive && setSplits(found))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -90,7 +106,7 @@ export function TreasuryFees() {
     !!account && !!treasury && account.toLowerCase() === treasury.toLowerCase();
 
   const refresh = useCallback(() => {
-    if (!isTreasury) return;
+    if (!account) return;
     setRows(null);
     readClaimable()
       .then(setRows)
@@ -125,7 +141,7 @@ export function TreasuryFees() {
     readHoldings(account as `0x${string}`)
       .then(setHoldings)
       .catch(() => setHoldings([]));
-  }, [isTreasury, account]);
+  }, [account]);
 
   /**
    * Ramène en WETH la part vendable d'un token reçu en frais.
@@ -322,22 +338,30 @@ export function TreasuryFees() {
   }
 
   /**
-   * Réservé à la trésorerie.
+   * Qui voit ce bouton, et pourquoi.
    *
-   * `collect` reste permissionless dans le contrat, et c'est une propriété
-   * qu'on ne touche pas : la collecte ne doit dépendre de personne. Mais un
-   * bouton « frais » à côté du wallet d'un créateur laisse entendre qu'une part
-   * lui revient, et ce n'est pas le cas aujourd'hui — les frais vont
-   * intégralement au protocole. Tant que ce partage n'existe pas, l'interface
-   * ne doit pas le suggérer.
+   * `collect` est permissionless dans le contrat — la collecte ne doit dépendre
+   * de personne — mais l'interface ne le propose qu'à ceux à qui une collecte
+   * verse quelque chose : la trésorerie, et les créateurs depuis que le locker
+   * partage par côté. Le proposer à un visiteur laisserait croire qu'une part
+   * lui revient.
    *
-   * Le jour où une part créateur existera, elle vivra dans le contrat, pas dans
-   * la visibilité d'un bouton.
+   * Sur le locker précédent, `splits` est faux et seule la trésorerie le voit :
+   * c'est la vérité de ce contrat-là.
    */
-  if (!isDeployed || !isTreasury) return null;
+  const mine =
+    rows?.filter(
+      (row) =>
+        !!account && splits && row.creator.toLowerCase() === account.toLowerCase()
+    ) ?? [];
+  const isCreator = mine.length > 0;
 
-  const pending = rows?.reduce((sum, row) => sum + row.quote, 0n) ?? 0n;
-  const withFees = rows?.filter((row) => row.quote > 0n || row.token > 0n) ?? [];
+  if (!isDeployed || (!isTreasury && !isCreator)) return null;
+
+  // La trésorerie voit tous les lancements ; un créateur ne voit que les siens.
+  const visible = isTreasury ? (rows ?? []) : mine;
+  const pending = visible.reduce((sum, row) => sum + row.quote, 0n);
+  const withFees = visible.filter((row) => row.quote > 0n || row.token > 0n);
   // Rien à collecter, et rien à déballer : pas de bouton pour rien. Le WETH
   // compte, sinon le bouton disparaîtrait juste après une collecte réussie —
   // au moment précis où il faut pouvoir en faire quelque chose.
@@ -350,7 +374,7 @@ export function TreasuryFees() {
       <DialogTrigger asChild>
         <Button variant="card" size="sm" onClick={refresh}>
           <Coins />
-          {rows === null ? "Fees" : `${eth(pending)} ETH`}
+          {rows === null || !isTreasury ? "Fees" : `${eth(pending)} ETH`}
         </Button>
       </DialogTrigger>
 
@@ -358,13 +382,26 @@ export function TreasuryFees() {
         <DialogHeader>
           <DialogTitle>Protocol fees</DialogTitle>
           <DialogDescription>
-            Swap fees accrued to each locked position. Collecting always pays
-            the treasury written into the locker&apos;s constructor, never the
-            caller — this button only triggers it, and so could anyone.
+            {splits ? (
+              <>
+                Swap fees accrued to each locked position. Uniswap charges on
+                whichever side goes in, so buys pay in ETH and sells pay in the
+                token — the quote goes to the treasury, the tokens to whoever
+                launched it. Collecting is permissionless: one transaction pays
+                both, whoever sends it.
+              </>
+            ) : (
+              <>
+                Swap fees accrued to each locked position. Collecting always
+                pays the treasury written into the locker&apos;s constructor,
+                never the caller — this button only triggers it, and so could
+                anyone.
+              </>
+            )}
             {treasury && (
               <>
                 {" "}
-                Here that is{" "}
+                Treasury:{" "}
                 <span className="font-mono text-[11px] break-all">
                   {treasury}
                 </span>
@@ -396,10 +433,19 @@ export function TreasuryFees() {
                     <span className="text-muted-foreground">{row.symbol}</span>
                   </p>
                   <p className="font-mono text-xs text-muted-foreground tabular-nums">
-                    {eth(row.quote, 6)} ETH
-                    {row.token > 0n &&
-                      ` · ${formatTokens(Number(row.token) / 1e18)} ${row.symbol}`}
+                    {eth(row.quote, 6)} ETH → treasury
                   </p>
+                  {row.token > 0n && (
+                    <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                      {formatTokens(Number(row.token) / 1e18)} {row.symbol} →{" "}
+                      {splits
+                        ? account &&
+                          row.creator.toLowerCase() === account.toLowerCase()
+                          ? "you"
+                          : "creator"
+                        : "treasury"}
+                    </p>
+                  )}
                 </div>
                 <Button
                   size="sm"
@@ -408,8 +454,10 @@ export function TreasuryFees() {
                 >
                   {busy === row.address ? (
                     <Loader2 className="animate-spin" />
-                  ) : (
+                  ) : isTreasury ? (
                     "Collect"
+                  ) : (
+                    "Claim"
                   )}
                 </Button>
               </li>

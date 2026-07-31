@@ -613,7 +613,22 @@ interface IRevealLocker {
                   {
                     term: "Trade fee",
                     description:
-                      "The Uniswap V3 fee tier of the pool, accruing to that locked position. collect(token) is permissionless and sends only to the treasury written at deployment — anyone can trigger it, nobody can redirect it, and the contract never holds funds between calls.",
+                      "The Uniswap V3 fee tier of the pool, accruing to that locked position. collect(token) is permissionless: anyone can trigger it, nobody can redirect it, and the locker never holds funds between calls.",
+                  },
+                  {
+                    term: "Split by side, not by percentage",
+                    description:
+                      "Uniswap charges its fee on whichever asset goes in, so a buy pays in ETH and a sell pays in the token. collect sends the quote side to the immutable treasury and the token side to whoever launched it — two calls in one transaction, each with a different recipient. The share follows what was actually earned rather than a number decided in advance.",
+                  },
+                  {
+                    term: "What a creator receives",
+                    description:
+                      "Tokens, in proportion to how much of their own token was sold. They arrive straight from the pool and open an ordinary position: a tenth sellable at once, all of it after unlockSeconds, and a collection re-ages the locked remainder exactly as a repurchase would. A creator is paid earlier than others are, never freer.",
+                  },
+                  {
+                    term: "Nobody has to claim for the treasury",
+                    description:
+                      "Because one call pays both recipients, a creator collecting their own share pays the protocol in the same transaction. The treasury has nothing to trigger and no schedule to keep.",
                   },
                   {
                     term: "No sell penalty",

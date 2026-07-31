@@ -254,11 +254,41 @@ export type Claimable = {
   address: `0x${string}`;
   name: string;
   symbol: string;
-  /** Quote due à la trésorerie, en wei. */
+  /** Quote due, en wei. Elle va à la trésorerie, quel que soit l'appelant. */
   quote: bigint;
-  /** Tokens dus à la trésorerie, en wei. */
+  /**
+   * Tokens dus, en wei. Ils vont au créateur du lancement quand le locker
+   * partage les frais, et à la trésorerie sur le locker précédent.
+   */
   token: bigint;
+  /** Le créateur enregistré au lancement. Destinataire du côté token. */
+  creator: `0x${string}`;
 };
+
+/**
+ * Vrai quand le locker déployé partage les frais par côté.
+ *
+ * Le locker précédent versait les deux côtés à la trésorerie et n'expose pas
+ * cette constante, donc l'appel échoue et on répond faux. L'interface décrit
+ * ainsi le contrat auquel elle parle, pas celui qu'on aimerait avoir.
+ */
+export async function readSplitsFees(): Promise<boolean> {
+  if (!isDeployed) return false;
+  try {
+    const locker = await publicClient.readContract({
+      address: LAUNCHER_ADDRESS as `0x${string}`,
+      abi: launcherAbi,
+      functionName: "locker",
+    });
+    return await publicClient.readContract({
+      address: locker,
+      abi: lockerAbi,
+      functionName: "SPLITS_FEES",
+    });
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Ce que la position de chaque lancement doit à la trésorerie, maintenant.
@@ -300,13 +330,24 @@ export async function readClaimable(): Promise<Claimable[]> {
         ]);
 
         const quoteIsToken0 = position[6];
-        const [amount0, amount1] = simulated.result;
+        const [first, second] = simulated.result;
+        /**
+         * Le locker qui partage rend déjà (quote, token) ; le précédent rendait
+         * (amount0, amount1). On remet dans l'ordre en s'appuyant sur
+         * `quoteIsToken0`, qui existe sur les deux — plutôt que sur le nom des
+         * valeurs de retour, qui ne survit pas à l'ABI.
+         */
+        const splits = await readSplitsFees();
+        const quote = splits ? first : quoteIsToken0 ? first : second;
+        const token = splits ? second : quoteIsToken0 ? second : first;
+
         return {
           address: launch.address,
           name: launch.name,
           symbol: launch.symbol,
-          quote: quoteIsToken0 ? amount0 : amount1,
-          token: quoteIsToken0 ? amount1 : amount0,
+          quote,
+          token,
+          creator: position[5],
         };
       } catch {
         // Un token illisible ne doit pas emporter la liste entière.

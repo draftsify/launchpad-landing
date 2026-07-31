@@ -221,4 +221,111 @@ contract RevealLockerTest is RevealBase {
         vm.expectRevert(RevealLocker.UnknownToken.selector);
         locker.graduationProgress(makeAddr("not a launch"));
     }
+
+    /* ------------------------- partage des frais ------------------------- */
+
+    /**
+     * Amène des frais des deux côtés : un achat les fait payer en quote, une
+     * vente les fait payer en token. Sans les deux, le partage ne se voit pas.
+     */
+    function _accrueBothSides() internal {
+        _pastRamp();
+        _buy(whale, 1 ether);
+        _fullyUnlock();
+        _sell(whale, token.balanceOf(whale) / 2);
+    }
+
+    function test_TheTokenSideGoesToTheCreator() public {
+        _accrueBothSides();
+
+        uint256 creatorBefore = token.balanceOf(creator);
+        uint256 treasuryTokensBefore = token.balanceOf(treasury);
+
+        locker.collect(address(token));
+
+        assertGt(token.balanceOf(creator), creatorBefore, "le createur n'a rien recu");
+        assertEq(
+            token.balanceOf(treasury),
+            treasuryTokensBefore,
+            "la tresorerie recoit encore des tokens"
+        );
+    }
+
+    function test_TheQuoteSideStillGoesToTheTreasury() public {
+        _accrueBothSides();
+
+        uint256 treasuryBefore = weth.balanceOf(treasury);
+        uint256 creatorQuoteBefore = weth.balanceOf(creator);
+
+        locker.collect(address(token));
+
+        assertGt(weth.balanceOf(treasury), treasuryBefore, "la tresorerie n'a rien recu");
+        assertEq(
+            weth.balanceOf(creator), creatorQuoteBefore, "le createur a touche de la quote"
+        );
+    }
+
+    /**
+     * Le point qui rend le partage acceptable : le créateur reçoit ses frais
+     * comme n'importe qui reçoit un achat. Pas de dispense, pas de sortie
+     * anticipée.
+     */
+    function test_TheCreatorsFeeTokensAreLockedLikeAnyBuy() public {
+        _accrueBothSides();
+
+        assertEq(token.balanceOf(creator), 0, "le socle suppose un createur sans position");
+        locker.collect(address(token));
+
+        uint256 received = token.balanceOf(creator);
+        assertGt(received, 0, "rien a mesurer");
+        assertApproxEqAbs(
+            token.releasable(creator),
+            received / 10,
+            1,
+            "le createur echappe au deblocage initial"
+        );
+        assertEq(token.unlockedBps(creator), 1_000, "le createur echappe au calendrier");
+    }
+
+    /// N'importe qui déclenche, et les deux destinataires sont payés pareil.
+    function test_AStrangerCollectingPaysBothSides() public {
+        _accrueBothSides();
+
+        address stranger = makeAddr("passer-by");
+        uint256 treasuryBefore = weth.balanceOf(treasury);
+        uint256 creatorBefore = token.balanceOf(creator);
+
+        vm.prank(stranger);
+        locker.collect(address(token));
+
+        assertGt(weth.balanceOf(treasury), treasuryBefore, "tresorerie non payee");
+        assertGt(token.balanceOf(creator), creatorBefore, "createur non paye");
+        assertEq(weth.balanceOf(stranger), 0, "le collecteur a touche de la quote");
+        assertEq(token.balanceOf(stranger), 0, "le collecteur a touche des tokens");
+    }
+
+    /**
+     * Le locker ne détient rien, à aucun instant. C'est ce qui lui évite d'avoir
+     * à sortir d'une position, donc de réclamer une dispense du verrou.
+     */
+    function test_TheLockerHoldsNeitherSideAfterCollecting() public {
+        _accrueBothSides();
+        locker.collect(address(token));
+
+        assertEq(weth.balanceOf(address(locker)), 0, "de la quote est restee");
+        assertEq(token.balanceOf(address(locker)), 0, "des tokens sont restes");
+    }
+
+    /// Et la position elle-même n'a pas bougé d'un wei.
+    function test_TheSplitLeavesThePositionUntouched() public {
+        _accrueBothSides();
+
+        uint128 before = locker.liquidityNow(address(token));
+        locker.collect(address(token));
+
+        assertEq(locker.liquidityNow(address(token)), before, "la liquidite a bouge");
+        assertEq(
+            locker.positionOwner(address(token)), address(locker), "le NFT a bouge"
+        );
+    }
 }

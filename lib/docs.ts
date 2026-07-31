@@ -333,9 +333,10 @@ export const EVENTS: EventDef[] = [
       "The locker took permanent ownership of the position. Emitted once per launch, by the locker.",
   },
   {
-    signature: "Collected(address token, uint256 amount0, uint256 amount1)",
+    signature:
+      "Collected(address token, uint256 quoteToTreasury, uint256 tokensToCreator)",
     description:
-      "Swap fees were materialised and sent to the treasury. Anyone may trigger it, the destination is immutable, and the position's liquidity is unchanged by construction.",
+      "Swap fees were materialised and paid out — the quote side to the immutable treasury, the token side to the launch's creator. Named by recipient rather than by amount0/amount1, which forced every reader to work out which of the two was the quote. Anyone may trigger it, neither destination can be redirected, and the position's liquidity is unchanged by construction.",
   },
   {
     signature: "Graduated(address token, address pool, uint256 quoteAmount)",

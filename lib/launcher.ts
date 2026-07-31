@@ -37,9 +37,12 @@ export const lockerAbi = parseAbi([
   "function graduationProgress(address token) view returns (uint256)",
   "function graduated(address token) view returns (bool)",
   "function syncGraduation(address token)",
-  "function collect(address token) returns (uint256 amount0, uint256 amount1)",
+  "function collect(address token) returns (uint256 quoteToTreasury, uint256 tokensToCreator)",
+  // Absent du locker precedent, qui versait tout a la tresorerie. Son echec est
+  // le signal : l interface decrit le partage seulement la ou il existe.
+  "function SPLITS_FEES() view returns (bool)",
   "function GRADUATION_QUOTE() view returns (uint256)",
-  "event Collected(address indexed token, uint256 amount0, uint256 amount1)",
+  "event Collected(address indexed token, uint256 quoteToTreasury, uint256 tokensToCreator)",
   "event Graduated(address indexed token, address indexed pool, uint256 quoteAmount)",
 ]);
 
