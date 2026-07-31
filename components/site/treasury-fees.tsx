@@ -81,7 +81,7 @@ export function TreasuryFees() {
     !!account && !!treasury && account.toLowerCase() === treasury.toLowerCase();
 
   const refresh = useCallback(() => {
-    if (!account) return;
+    if (!isTreasury) return;
     setRows(null);
     readClaimable()
       .then(setRows)
@@ -112,7 +112,7 @@ export function TreasuryFees() {
         setWrapped({ token, balance });
       })
       .catch(() => setWrapped(null));
-  }, [account]);
+  }, [isTreasury, account]);
 
   async function unwrap() {
     const provider = window.ethereum;
@@ -212,16 +212,19 @@ export function TreasuryFees() {
   }
 
   /**
-   * Visible dès qu'un wallet est connecté, et non pour la seule trésorerie.
+   * Réservé à la trésorerie.
    *
-   * Le premier jet le réservait à l'adresse qui reçoit, pour ne pas laisser
-   * croire à un visiteur que quelque chose lui revient. Mais `collect` est
-   * permissionless par construction — la collecte ne doit dépendre de
-   * personne — et le cacher revenait à contredire cette propriété dans
-   * l'interface. Il est donc visible, et la destination est écrite noir sur
-   * blanc à côté du bouton qui déclenche.
+   * `collect` reste permissionless dans le contrat, et c'est une propriété
+   * qu'on ne touche pas : la collecte ne doit dépendre de personne. Mais un
+   * bouton « frais » à côté du wallet d'un créateur laisse entendre qu'une part
+   * lui revient, et ce n'est pas le cas aujourd'hui — les frais vont
+   * intégralement au protocole. Tant que ce partage n'existe pas, l'interface
+   * ne doit pas le suggérer.
+   *
+   * Le jour où une part créateur existera, elle vivra dans le contrat, pas dans
+   * la visibilité d'un bouton.
    */
-  if (!isDeployed || !account) return null;
+  if (!isDeployed || !isTreasury) return null;
 
   const pending = rows?.reduce((sum, row) => sum + row.quote, 0n) ?? 0n;
   const withFees = rows?.filter((row) => row.quote > 0n || row.token > 0n) ?? [];
