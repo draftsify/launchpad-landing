@@ -13,6 +13,7 @@ import { useActivity } from "@/components/site/use-activity";
 import { TokenMark } from "@/components/site/token-mark";
 import { TradePanel } from "@/components/site/trade-panel";
 import { GraduationCard } from "@/components/site/graduation-card";
+import { hiddenReason } from "@/lib/hidden";
 import { useLaunch } from "@/components/site/use-launches";
 import { useRules } from "@/components/site/use-rules";
 import { XIcon } from "@/components/x-icon";
@@ -37,6 +38,7 @@ function Frame({ children }: { children: React.ReactNode }) {
 
 export function TokenDetail({ slug }: { slug: string }) {
   const { data: launch, loading, error, reload } = useLaunch(slug);
+  const hidden = hiddenReason(slug);
   // Les règles affichées sont celles que le launcher applique, pas une copie.
   const rules = useRules();
   // L'historique, relu depuis les journaux du pool par /api/activity.
@@ -51,6 +53,42 @@ export function TokenDetail({ slug }: { slug: string }) {
    */
   const indexed = (read: (a: NonNullable<typeof activity.data>) => string) =>
     activity.data ? read(activity.data) : "—";
+
+  /**
+   * Un token retiré de la liste garde une page qui dit pourquoi.
+   *
+   * Le renvoyer sur « rien ne répond à cette adresse » serait faux : le token
+   * existe, son pool aussi, et quelqu'un qui arrive ici en détient peut-être.
+   * Lui laisser le lien vers l'explorateur est le minimum — l'interface a le
+   * droit de ne pas lister, pas celui de faire croire à une disparition.
+   */
+  if (hidden) {
+    return (
+      <Frame>
+        <div className="mt-10 flex flex-col items-center gap-3 rounded-2xl border border-dashed px-6 py-20 text-center">
+          <span className="flex size-11 items-center justify-center rounded-full border bg-card">
+            <TriangleAlert className="size-5 text-muted-foreground" />
+          </span>
+          <p className="font-medium">Not listed on this site</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            {hidden} This token still exists on {activeChain.name} and stays
+            tradable elsewhere — the protocol has no owner and nothing here can
+            remove it. Not listing it is this site&apos;s decision alone.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button variant="card" asChild>
+              <Link href="/launchpad">Browse launches</Link>
+            </Button>
+            <Button variant="ghost" asChild>
+              <a href={explorerAddress(slug)} target="_blank" rel="noreferrer">
+                View on explorer
+              </a>
+            </Button>
+          </div>
+        </div>
+      </Frame>
+    );
+  }
 
   if (!isDeployed || error || (!loading && !launch)) {
     return (

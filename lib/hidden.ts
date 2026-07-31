@@ -20,12 +20,20 @@ export const HIDDEN: { address: string; reason: string }[] = [
     // symbole du launchpad lui-même, par une adresse sans rapport avec le
     // projet. Un visiteur ne peut pas le distinguer d'un token officiel.
     address: "0x7416f459608a26270930d282a5393bcf1d2c849c",
-    reason: "Se fait passer pour le token officiel du launchpad",
+    reason:
+      "It launched under the launchpad's own name and symbol, from an address unconnected to the project.",
   },
 ];
 
-const SET = new Set(HIDDEN.map((h) => h.address.toLowerCase()));
+const BY_ADDRESS = new Map(
+  HIDDEN.map((h) => [h.address.toLowerCase(), h.reason] as const)
+);
 
 export function isHidden(address: string) {
-  return SET.has(address.toLowerCase());
+  return BY_ADDRESS.has(address.toLowerCase());
+}
+
+/** Le motif, ou `null`. Affiché tel quel : c'est ce qui rend le retrait vérifiable. */
+export function hiddenReason(address: string) {
+  return BY_ADDRESS.get(address.toLowerCase()) ?? null;
 }
