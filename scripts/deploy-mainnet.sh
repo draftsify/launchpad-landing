@@ -38,9 +38,37 @@ EXPLORER=https://robinhoodchain.blockscout.com
 # possible mais doit être un geste délibéré — et exige d'avoir vérifié que la
 # clé de l'adresse n'a jamais été partagée, collée ni exportée.
 TREASURY="${TREASURY:-0xa40679bC2f4f5B51Edb05E7A2D573292A3479c62}"
-if [ -z "${ACCOUNT:-}" ]; then
-  echo "ACCOUNT manquant : nom du keystore, par exemple ACCOUNT=deployer." >&2
-  echo "  Le créer une fois : cast wallet import deployer --interactive" >&2
+
+# Deux façons de signer, et le portefeuille matériel est la meilleure : la clé
+# ne touche jamais la machine, elle reste dans l'appareil qui affiche la
+# transaction avant de la signer.
+#
+#   LEDGER=1 bash scripts/deploy-mainnet.sh
+#   ACCOUNT=deployer bash scripts/deploy-mainnet.sh
+#
+# À savoir avant de choisir : le déployeur ne reçoit aucun pouvoir. Les
+# contrats n'ont ni propriétaire, ni administrateur, ni pause, ni fonction pour
+# changer la trésorerie. Une fois le déploiement fait, cette adresse est une
+# adresse comme une autre. Un wallet jetable financé du strict nécessaire fait
+# donc parfaitement l'affaire, et c'est le choix recommandé si aucun appareil
+# matériel n'est disponible.
+if [ -n "${LEDGER:-}" ]; then
+  SIGNER=(--ledger)
+  SENDER=$(cast wallet address --ledger)
+elif [ -n "${TREZOR:-}" ]; then
+  SIGNER=(--trezor)
+  SENDER=$(cast wallet address --trezor)
+elif [ -n "${ACCOUNT:-}" ]; then
+  SIGNER=(--account "$ACCOUNT")
+  SENDER=$(cast wallet address --account "$ACCOUNT")
+else
+  echo "Aucune méthode de signature. Choisissez-en une :" >&2
+  echo "  LEDGER=1 bash scripts/deploy-mainnet.sh      # rien sur le disque" >&2
+  echo "  TREZOR=1 bash scripts/deploy-mainnet.sh" >&2
+  echo "  ACCOUNT=deployer bash scripts/deploy-mainnet.sh" >&2
+  echo >&2
+  echo "Le keystore se crée une fois, en tapant la clé soi-même :" >&2
+  echo "  cast wallet import deployer --interactive" >&2
   exit 1
 fi
 
@@ -54,7 +82,6 @@ if ! [[ "$TREASURY" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
   exit 1
 fi
 
-SENDER=$(cast wallet address --account "$ACCOUNT")
 BALANCE=$(cast balance "$SENDER" --rpc-url $RPC)
 GAS_PRICE=$(cast gas-price --rpc-url $RPC)
 
@@ -92,7 +119,7 @@ read -r -p "Taper exactement DEPLOY pour continuer : " CONFIRM
 
 printf '\n\033[1mDéploiement\033[0m\n'
 TREASURY="$TREASURY" forge script script/Deploy.s.sol:Deploy \
-  --rpc-url $RPC --account "$ACCOUNT" --sender "$SENDER" --broadcast
+  --rpc-url $RPC "${SIGNER[@]}" --sender "$SENDER" --broadcast
 
 LAUNCHER=$(node -e "
   const r = require('./broadcast/Deploy.s.sol/4663/run-latest.json');
