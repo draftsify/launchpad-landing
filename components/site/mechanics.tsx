@@ -17,18 +17,35 @@ const EASE = [0.16, 1, 0.3, 1] as const;
  * aux trois règles.
  */
 
+/**
+ * Les valeurs de `RevealRules`, calculées et non estimées.
+ *
+ * L'axe du temps annonçait 0h / 6h / 12h / 24h — un calendrier qui n'a jamais
+ * été celui du protocole, et qui survivait au passage à une heure comme au
+ * passage à un quart d'heure. Ce sont maintenant les quatre points de
+ * `timeUnlockedBps` avec `initialUnlockBps = 1000` et `unlockSeconds = 900` :
+ * 10 % au départ, puis une droite jusqu'à 100 %.
+ */
 const TIME = [
-  { id: "0h", label: "0h", unlocked: 10 },
-  { id: "6h", label: "6h", unlocked: 34 },
-  { id: "12h", label: "12h", unlocked: 58 },
-  { id: "24h", label: "24h", unlocked: 100 },
+  { id: "0", label: "0 min", unlocked: 10 },
+  { id: "5", label: "5 min", unlocked: 40 },
+  { id: "10", label: "10 min", unlocked: 70 },
+  { id: "15", label: "15 min", unlocked: 100 },
 ];
 
+/**
+ * `reliefBps` : ticks de baisse / 6932, plafonné à 100 %. Un tick vaut 1,0001×,
+ * donc une baisse de p pour cent vaut ln(1 − p) / ln(1,0001) ticks.
+ *
+ * Les planchers affichés ici étaient 30 / 50 / 95 %. Les vrais sont 15 / 32 /
+ * 74 % — le simulateur promettait donc à peu près le double du relief que le
+ * contrat accorde, sur la page qui sert justement à comprendre la règle.
+ */
 const DRAWDOWN = [
   { id: "0", label: "0%", floor: 0 },
-  { id: "10", label: "−10%", floor: 30 },
-  { id: "20", label: "−20%", floor: 50 },
-  { id: "40", label: "−40%", floor: 95 },
+  { id: "10", label: "−10%", floor: 15 },
+  { id: "20", label: "−20%", floor: 32 },
+  { id: "40", label: "−40%", floor: 74 },
 ];
 
 /**
@@ -179,7 +196,9 @@ export function Mechanics() {
 
         <div className="space-y-3 lg:border-l lg:pl-8">
           <Control
-            label="Time since launch"
+            /* Depuis l'achat, pas depuis le lancement : chaque position a son
+               propre calendrier, et quelqu'un qui entre tard repart de 10 %. */
+            label="Time since the buy"
             options={TIME}
             value={time}
             onChange={setTime}

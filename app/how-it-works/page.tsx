@@ -18,7 +18,7 @@ const RULES = [
   },
   {
     title: "Losses open the gate faster",
-    body: "Drawdown raises the floor. A position down 40% is nearly fully liquid regardless of how recently it was bought.",
+    body: "Drawdown raises the floor, whatever the clock says: down 20% releases about a third of a position, down 40% about three quarters, and a halved price releases all of it. It is a floor and never a bonus — being in profit costs nothing.",
   },
   {
     title: "Graduation moves nothing",

@@ -50,6 +50,8 @@ export const DOC_NAV: DocGroup[] = [
   {
     title: "Reference",
     items: [
+      { id: "deployment", label: "Deployment", icon: KeyRound },
+      { id: "metadata", label: "Token metadata", icon: FileCode2 },
       { id: "interface", label: "Interface", icon: FileCode2 },
       { id: "events", label: "Events", icon: Radio },
       { id: "errors", label: "Errors", icon: AlertTriangle },
@@ -210,6 +212,91 @@ export const SNIPER_PARAMS: Param[] = [
     value: "25",
     description:
       "Cap on one buy at the opening of the ramp: 0.25% of supply. It rises linearly from there.",
+  },
+];
+
+/**
+ * Les adresses réellement en place sur Robinhood Chain.
+ *
+ * Écrites ici et pas seulement dans `contracts/deployments/4663.json` : une
+ * documentation qui décrit un protocole sans dire où il est ne permet à
+ * personne de vérifier quoi que ce soit. Chacune se relit sur la chaîne, et
+ * c'est le but.
+ */
+export type Deployed = { label: string; address: string; note: string };
+
+export const DEPLOYMENT: Deployed[] = [
+  {
+    label: "RevealLauncher",
+    address: "0x94d97C7AEc431b989132e3664b7cB3613CaC5b81",
+    note: "Every launch goes through it. Holds the rules, the supply and the tick range, none of which it can change.",
+  },
+  {
+    label: "RevealLocker",
+    address: "0x9D223bd9ebae36a04Ce4c29a4bEE203d7EA1791e",
+    note: "Deployed by the launcher, so its launcher() is necessarily the address above. Owns every position NFT and cannot give one back.",
+  },
+  {
+    label: "Treasury",
+    address: "0xa40679bC2f4f5B51Edb05E7A2D573292A3479c62",
+    note: "Immutable, written into the locker's constructor. Every swap fee ends here and nowhere else; there is no setter.",
+  },
+  {
+    label: "Uniswap V3 factory",
+    address: "0x1f7d7550B1b028f7571E69A784071F0205FD2EfA",
+    note: "Chain infrastructure, not ours. The launcher checks the position manager reports this same factory before accepting it.",
+  },
+  {
+    label: "NonfungiblePositionManager",
+    address: "0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3",
+    note: "Mints the position straight to the locker. The launcher's copy of its interface deliberately omits decreaseLiquidity, burn, approve and transferFrom.",
+  },
+  {
+    label: "WETH (quote)",
+    address: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    note: "The only quote asset. Not the OP-stack predeploy — this is an Arbitrum Orbit chain and 0x4200…0006 carries no code here.",
+  },
+];
+
+/**
+ * Le format du document que `metadataURI` porte.
+ *
+ * Documenté parce qu'il est écrit par qui lance le token, pas par cette
+ * interface : un lancement fait en appelant le contrat directement peut y
+ * mettre n'importe quoi, et ce qui suit dit ce qui sera affiché.
+ */
+export const METADATA_RULES: Param[] = [
+  {
+    name: "document",
+    type: "data URI",
+    bound: "≤ 16384 bytes",
+    value: "JSON, base64",
+    description:
+      "The whole thing lives in the contract — no IPFS pin, no server, nothing to keep paying for. Base64 rather than percent-encoding: it costs exactly 4/3 whatever the content, while percent-encoding a base64 image can triple it and blow the contract's bound after signature.",
+  },
+  {
+    name: "image",
+    type: "string",
+    bound: "≤ 8192 bytes",
+    value: "data:image/…;base64",
+    description:
+      "Raster data URI only — png, jpeg, webp or gif. A remote URL is ignored on display: rendering one would make every visitor of the launchpad fetch an address the token creator chose. SVG is ignored too, being a document rather than an image.",
+  },
+  {
+    name: "thumbnail",
+    type: "—",
+    bound: "256px square",
+    value: "webp",
+    description:
+      "What this interface writes: the source centred on a square canvas, so nothing is cropped by a square tile, at the largest of 256/192/128px that fits the byte budget. Quality drops only after size has, because artefacts read worse than a smaller image.",
+  },
+  {
+    name: "text fields",
+    type: "string",
+    bound: "1000 / 128 chars",
+    value: "—",
+    description:
+      "description, then website, x, telegram and discord. Control characters and bidirectional marks are dropped on display — the latter can render a string as the reverse of what it contains, which is the exact tool for impersonating another token.",
   },
 ];
 

@@ -20,6 +20,8 @@ import {
   ERRORS,
   EVENTS,
   CREATOR_BUY_PARAMS,
+  DEPLOYMENT,
+  METADATA_RULES,
   GRADUATION_PARAMS,
   RELIEF_PARAMS,
   SNIPER_PARAMS,
@@ -420,11 +422,78 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
             {/* --------------------------- Reference --------------------- */}
 
             <DocSection
+              id="deployment"
+              title="Deployment"
+              lede="Where the protocol actually is, so every claim on this page can be checked."
+            >
+              <DefList
+                items={DEPLOYMENT.map((d) => ({
+                  term: `${d.label} · ${d.address}`,
+                  description: d.note,
+                }))}
+              />
+              <Prose>
+                Chain id 4663. The constructor arguments and the code hashes of
+                what is really in place are committed at{" "}
+                <Inline>contracts/deployments/4663.json</Inline>, so a third
+                party can contest the deployment without trusting this page.
+              </Prose>
+              <Callout title="An earlier launcher exists" tone="warning">
+                <Inline>0x435383D999C0932CB7CA871d1eA324aF2e86D48E</Inline> was
+                the first launcher and had a one hour unlock. It is orphaned,
+                not upgraded: rules are immutable, so changing them meant a new
+                contract, and any token launched on the old one keeps the old
+                rules forever. Nothing here points at it.
+              </Callout>
+            </DocSection>
+
+            <DocSection
+              id="metadata"
+              title="Token metadata"
+              lede="The document a token carries, and what this interface will show of it."
+            >
+              <ParamTable params={METADATA_RULES} />
+              <Prose>
+                <Inline>metadataURI</Inline> is an argument of{" "}
+                <Inline>launch</Inline>, written once with no setter. So it is
+                written by whoever launched the token — not necessarily by this
+                form. Everything above is therefore enforced twice: as a bound
+                when this interface writes a document, and as a filter when it
+                reads one.
+              </Prose>
+              <Callout title="Read it yourself">
+                An integrator should apply the same filter rather than trust
+                this one. The rules are small enough to restate: raster data URI
+                for the image, length bounds on text, no control characters.
+              </Callout>
+            </DocSection>
+
+            <DocSection
               id="interface"
               title="Interface"
               lede="The surface an integration needs."
             >
-              <Code>{`interface IRevealToken {
+              <Code>{`interface IRevealLauncher {
+    // Three strings. Supply, rules and tick range are not arguments.
+    function launch(string calldata name, string calldata symbol,
+                    string calldata metadataURI)
+        external returns (address token, address pool);
+
+    // The same, plus the creator's own buy in that transaction.
+    function launchWithBuy(string calldata name, string calldata symbol,
+                           string calldata metadataURI)
+        external payable returns (address token, address pool);
+
+    // The registry. Readable before any token exists, which is what lets a
+    // form state the cap while it is being filled in.
+    function creatorBuyCap() external view returns (uint256);
+    function tokenCount() external view returns (uint256);
+    function tokens(uint256 index) external view returns (address);
+    function rules() external view returns (Rules memory);
+    function locker() external view returns (address);
+}
+
+interface IRevealToken {
     // What may leave right now -- to the pool or to another wallet.
     function releasable(address holder) external view returns (uint256);
     // Its complement. releasable + lockedOf == balanceOf, always.
@@ -438,6 +507,11 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
     function unlockedBps(address holder) external view returns (uint256);
     function drawdownTicks(address holder) external view returns (uint256);
     function twapTick() external view returns (int24 tick, bool fresh);
+
+    // The creator's window. Zero from the block after the launch onwards.
+    function creator() external view returns (address);
+    function creatorBought() external view returns (uint256);
+    function creatorBuyRemaining() external view returns (uint256);
 
     function rules() external view returns (Rules memory);
     function metadataURI() external view returns (string memory);
