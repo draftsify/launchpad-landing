@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { GithubIcon } from "@/components/github-icon";
+import { XIcon } from "@/components/x-icon";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { launchesOpen } from "@/lib/launch-gate";
 import { cn } from "@/lib/utils";
@@ -31,17 +31,18 @@ const COMPANY = [
 ];
 
 /**
- * L'icône X visait x.com sans compte : un logo qui ouvre la page d'accueil du
- * réseau. Elle revient dès qu'un compte existe — réimporter `XIcon` depuis
- * `@/components/x-icon` et ajouter
- * `{ label: "X", icon: <XIcon />, href: "https://x.com/<compte>" }`.
- * Le composant reste dans le dépôt, et sert déjà aux liens des tokens.
+ * Le compte existe désormais, donc l'icône X remplace celle de GitHub.
+ *
+ * Une seule entrée, et c'est voulu : le dépôt reste public et cité dans les
+ * docs, mais le pied de page sert à joindre le projet, pas à lister tout ce
+ * qu'il publie. Le lien X porte un compte précis — un logo qui ouvre la page
+ * d'accueil du réseau ne mène nulle part.
  */
 const SOCIALS = [
   {
-    label: "GitHub",
-    icon: <GithubIcon />,
-    href: "https://github.com/draftsify/launchpad-landing",
+    label: "X",
+    icon: <XIcon />,
+    href: "https://x.com/launchonreveal",
   },
 ];
 
