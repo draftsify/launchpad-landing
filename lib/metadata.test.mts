@@ -73,7 +73,37 @@ check(
   "https retire du domaine",
   parseMetadata(enc({ ...base, website: "https://reveal.xyz/docs" }))?.website === "reveal.xyz/docs"
 );
+// Le cas qui a fait disparaitre les liens du premier vrai lancement.
+check(
+  "chaine de requete conservee",
+  parseMetadata(enc({ ...base, website: "https://x.com/search?q=leafcat&src=typed_query" }))
+    ?.website === "x.com/search?q=leafcat&src=typed_query"
+);
+check(
+  "hote sans point rejete",
+  parseMetadata(enc({ ...base, website: "localhost/admin" }))?.website === undefined
+);
+check(
+  "identifiants dans l'autorite rejetes",
+  parseMetadata(enc({ ...base, website: "https://x.com@evil.example/" }))?.website === undefined
+);
 check("pseudo x accepte", parseMetadata(enc({ ...base, x: "launchonreveal" }))?.x === "launchonreveal");
+check(
+  "url x complete ramenee au pseudo",
+  parseMetadata(enc({ ...base, x: "https://x.com/launchonreveal" }))?.x === "launchonreveal"
+);
+check(
+  "arobase retiree du pseudo",
+  parseMetadata(enc({ ...base, x: "@launchonreveal" }))?.x === "launchonreveal"
+);
+check(
+  "recherche x refusee comme pseudo",
+  parseMetadata(enc({ ...base, x: "https://x.com/search?q=leafcat" }))?.x === undefined
+);
+check(
+  "url telegram ramenee au pseudo",
+  parseMetadata(enc({ ...base, telegram: "https://t.me/revealchat" }))?.telegram === "revealchat"
+);
 
 console.log("--- documents casses ---");
 check("json invalide -> null", parseMetadata("data:application/json;base64,####") === null);
