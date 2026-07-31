@@ -70,12 +70,12 @@ export function TreasuryFees() {
     !!account && !!treasury && account.toLowerCase() === treasury.toLowerCase();
 
   const refresh = useCallback(() => {
-    if (!isTreasury) return;
+    if (!account) return;
     setRows(null);
     readClaimable()
       .then(setRows)
       .catch(() => setRows([]));
-  }, [isTreasury]);
+  }, [account]);
 
   useEffect(() => {
     refresh();
@@ -129,10 +129,22 @@ export function TreasuryFees() {
     }
   }
 
-  if (!isDeployed || !isTreasury) return null;
+  /**
+   * Visible dès qu'un wallet est connecté, et non pour la seule trésorerie.
+   *
+   * Le premier jet le réservait à l'adresse qui reçoit, pour ne pas laisser
+   * croire à un visiteur que quelque chose lui revient. Mais `collect` est
+   * permissionless par construction — la collecte ne doit dépendre de
+   * personne — et le cacher revenait à contredire cette propriété dans
+   * l'interface. Il est donc visible, et la destination est écrite noir sur
+   * blanc à côté du bouton qui déclenche.
+   */
+  if (!isDeployed || !account) return null;
 
   const pending = rows?.reduce((sum, row) => sum + row.quote, 0n) ?? 0n;
   const withFees = rows?.filter((row) => row.quote > 0n || row.token > 0n) ?? [];
+  // Rien à collecter et rien en cours de lecture : pas de bouton pour rien.
+  if (rows !== null && withFees.length === 0) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -147,9 +159,19 @@ export function TreasuryFees() {
         <DialogHeader>
           <DialogTitle>Protocol fees</DialogTitle>
           <DialogDescription>
-            Swap fees accrued to each locked position. Collecting always pays the
-            treasury written into the locker — this button only triggers it, and
-            so could anyone.
+            Swap fees accrued to each locked position. Collecting always pays
+            the treasury written into the locker&apos;s constructor, never the
+            caller — this button only triggers it, and so could anyone.
+            {treasury && (
+              <>
+                {" "}
+                Here that is{" "}
+                <span className="font-mono text-[11px] break-all">
+                  {treasury}
+                </span>
+                {isTreasury ? " — the wallet you are connected with." : "."}
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
