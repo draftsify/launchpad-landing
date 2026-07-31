@@ -60,7 +60,13 @@ elif [ -n "${TREZOR:-}" ]; then
   SENDER=$(cast wallet address --trezor)
 elif [ -n "${ACCOUNT:-}" ]; then
   SIGNER=(--account "$ACCOUNT")
-  SENDER=$(cast wallet address --account "$ACCOUNT")
+  # Lire l'adresse du keystore exige de le déchiffrer, donc de saisir le mot de
+  # passe — une première fois ici, une seconde à la signature. Deux demandes
+  # identiques à quelques secondes d'intervalle se lisent comme un échec de la
+  # première, et c'est ce qui est arrivé. La fournir évite la demande, sans rien
+  # affaiblir : elle est vérifiée contre ce que le keystore contient vraiment,
+  # juste après, et une adresse fausse arrête tout.
+  SENDER="${SENDER:-$(cast wallet address --account "$ACCOUNT")}"
 else
   echo "Aucune méthode de signature. Choisissez-en une :" >&2
   echo "  LEDGER=1 bash scripts/deploy-mainnet.sh      # rien sur le disque" >&2
