@@ -63,6 +63,8 @@ export const tokenAbi = parseAbi([
   "function unlockedBps(address holder) view returns (uint256)",
   "function drawdownTicks(address holder) view returns (uint256)",
   "function balanceOf(address holder) view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function decimals() view returns (uint8)",
 ]);
 
 /**

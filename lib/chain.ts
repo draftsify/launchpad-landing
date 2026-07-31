@@ -56,6 +56,23 @@ export const LAUNCHER_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHER ?? "") as
 export const isDeployed = /^0x[0-9a-fA-F]{40}$/.test(LAUNCHER_ADDRESS);
 
 /**
+ * L'origine publique du site, pour les URL qui doivent être absolues : celles
+ * qu'un agrégateur va chercher, et celles qu'un aperçu de lien affiche.
+ *
+ * `VERCEL_PROJECT_PRODUCTION_URL` porte le domaine de production même quand la
+ * réponse est servie par un déploiement de prévisualisation — ce qui est ce
+ * qu'on veut ici : une image de token ne doit pas pointer sur une URL de
+ * prévisualisation qui expirera.
+ */
+export function siteUrl() {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (vercel) return `https://${vercel}`;
+  return "https://www.launchonreveal.com";
+}
+
+/**
  * Nœud payant, côté serveur uniquement.
  *
  * Sans préfixe `NEXT_PUBLIC_`, cette valeur n'entre pas dans le bundle envoyé
