@@ -369,7 +369,18 @@ export function TradePanel({ launch, onDone }: { launch: Launch; onDone?: () => 
   const max = side === "buy" ? null : sellable;
 
   return (
-    <section className="flex h-full flex-col gap-4 rounded-2xl border bg-card p-5">
+    /**
+     * Hauteur naturelle, et non `h-full`.
+     *
+     * `h-full` valait 100 % de la colonne, que la grille étire à la hauteur de
+     * la colonne voisine. Ce panneau consommait donc toute la place à lui seul
+     * et la carte de graduation, qui le suit, débordait par le bas — jusqu'à
+     * chevaucher le pied de page. Visible à 1024 px de large, invisible à 1440 :
+     * la colonne de gauche y est plus haute que les deux cartes réunies.
+     *
+     * Effet de bord bienvenu : le grand vide au milieu du panneau disparaît.
+     */
+    <section className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-medium">Trade</h3>
         <div className="inline-flex items-center rounded-full border bg-background p-0.5">

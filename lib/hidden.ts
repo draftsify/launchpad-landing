@@ -25,6 +25,30 @@ export const HIDDEN: { address: string; reason: string }[] = [
   },
 ];
 
+/**
+ * Tokens dont on n'affiche pas les liens, sans les retirer de la liste.
+ *
+ * Plus étroit que `HIDDEN` et c'est le but : un lien qui n'aide personne ne
+ * justifie pas de faire disparaître un lancement. Le document reste dans le
+ * contrat et reste lisible par n'importe qui — on choisit seulement de ne pas
+ * le mettre en avant ici.
+ */
+export const LINKS_MUTED: { address: string; reason: string }[] = [
+  {
+    // Le champ `website` porte une URL de recherche X, pas un site. Affichée,
+    // elle ressemble à un lien officiel et ne mène nulle part d'utile.
+    address: "0xbc4fa88617dd5dfe2efeaa4a11f233acde6af672",
+    reason: "Search URL rather than a site",
+  },
+];
+
+const MUTED = new Set(LINKS_MUTED.map((m) => m.address.toLowerCase()));
+
+/** Vrai quand les liens de ce token ne doivent pas être affichés. */
+export function linksMuted(address: string) {
+  return MUTED.has(address.toLowerCase());
+}
+
 const BY_ADDRESS = new Map(
   HIDDEN.map((h) => [h.address.toLowerCase(), h.reason] as const)
 );

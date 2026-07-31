@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { activeChain, isDeployed, publicClient, siteUrl } from "@/lib/chain";
 import { tokenAbi } from "@/lib/launcher";
 import { parseMetadata } from "@/lib/metadata";
+import { linksMuted } from "@/lib/hidden";
 
 /**
  * Les métadonnées d'un token, dans la forme que le reste du monde lit.
@@ -43,11 +44,15 @@ export async function GET(
     ]);
 
     const meta = parseMetadata(uri);
+    // Même retrait que dans l'interface : ce que le site ne montre pas, il ne
+    // le republie pas non plus sous une forme plus commode.
     const links: Record<string, string> = {};
-    if (meta?.website) links.website = `https://${meta.website}`;
-    if (meta?.x) links.x = `https://x.com/${meta.x}`;
-    if (meta?.telegram) links.telegram = `https://t.me/${meta.telegram}`;
-    if (meta?.discord) links.discord = `https://${meta.discord}`;
+    if (!linksMuted(token)) {
+      if (meta?.website) links.website = `https://${meta.website}`;
+      if (meta?.x) links.x = `https://x.com/${meta.x}`;
+      if (meta?.telegram) links.telegram = `https://t.me/${meta.telegram}`;
+      if (meta?.discord) links.discord = `https://${meta.discord}`;
+    }
 
     return NextResponse.json(
       {

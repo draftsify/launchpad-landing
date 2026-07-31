@@ -35,3 +35,31 @@ export function formatAge(launchedAt: number, now = Date.now()) {
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
 }
+
+/**
+ * Un montant en dollars, à partir d'un montant en ETH et d'un prix.
+ *
+ * Rend `null` quand le prix est inconnu, pour que l'appelant retombe sur l'ETH
+ * plutôt que d'afficher un dollar inventé. C'est la seule donnée du site qui ne
+ * vienne pas de la chaîne : elle est convertie par un tiers, et une conversion
+ * silencieusement fausse est pire qu'une unité moins familière.
+ */
+export function formatUsd(eth: number, usdPerEth: number | null) {
+  if (usdPerEth === null || !Number.isFinite(eth)) return null;
+  const value = eth * usdPerEth;
+
+  if (value === 0) return "$0";
+  // Sous le centime, les chiffres significatifs comptent plus que les
+  // décimales : un prix de token vaut souvent 0,0000027 $.
+  if (value < 0.01) return `$${value.toPrecision(2)}`;
+  if (value < 1) return `$${value.toFixed(3)}`;
+  if (value < 1_000) return `$${value.toFixed(2)}`;
+  if (value < 1_000_000)
+    return `$${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return `$${(value / 1_000_000).toFixed(2)}M`;
+}
+
+/** Le montant en dollars si on le connaît, en ETH sinon. */
+export function formatValue(eth: number, usdPerEth: number | null) {
+  return formatUsd(eth, usdPerEth) ?? formatEth(eth);
+}

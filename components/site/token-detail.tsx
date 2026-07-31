@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Globe, Loader2, Send, TriangleAlert } from "lucide-react";
 
 import { activeChain, explorerAddress, isDeployed } from "@/lib/chain";
-import { formatAge, formatEth, formatTokens } from "@/lib/format";
+import { formatAge, formatTokens, formatValue } from "@/lib/format";
 import { formatDuration } from "@/lib/presets";
 import { Button } from "@/components/ui/button";
 import { CopyAddress } from "@/components/site/copy-address";
@@ -14,9 +14,10 @@ import { useActivity } from "@/components/site/use-activity";
 import { TokenMark } from "@/components/site/token-mark";
 import { TradePanel } from "@/components/site/trade-panel";
 import { GraduationCard } from "@/components/site/graduation-card";
-import { hiddenReason } from "@/lib/hidden";
+import { hiddenReason, linksMuted } from "@/lib/hidden";
 import { useLaunch } from "@/components/site/use-launches";
 import { useRules } from "@/components/site/use-rules";
+import { useEthPrice } from "@/components/site/use-eth-price";
 import { XIcon } from "@/components/x-icon";
 import { formatEther } from "viem";
 
@@ -42,6 +43,9 @@ export function TokenDetail({ slug }: { slug: string }) {
   const hidden = hiddenReason(slug);
   // Les règles affichées sont celles que le launcher applique, pas une copie.
   const rules = useRules();
+  // Le prix de l'ETH, pour afficher en dollars. Null quand la source ne repond
+  // pas : on retombe alors sur l'ETH plutot que d'inventer une conversion.
+  const usd = useEthPrice();
   // L'historique, relu depuis les journaux du pool par /api/activity.
   const activity = useActivity(slug);
 
@@ -144,7 +148,11 @@ export function TokenDetail({ slug }: { slug: string }) {
       href: `https://t.me/${meta.telegram}`,
       icon: <Send />,
     },
-  ].filter(Boolean) as { label: string; href: string; icon: React.ReactNode }[];
+  ]
+    // Certains documents portent un lien qui n'aide personne. On ne le montre
+    // pas ; il reste dans le contrat, lisible par qui veut.
+    .filter(() => !linksMuted(launch.address))
+    .filter(Boolean) as { label: string; href: string; icon: React.ReactNode }[];
 
   const explorer = explorerAddress(launch.address);
 
@@ -201,9 +209,9 @@ export function TokenDetail({ slug }: { slug: string }) {
 
       <div className="mt-8 grid divide-y rounded-2xl border sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
         {[
-          ["Market cap", formatEth(launch.marketCapEth)],
-          ["Liquidity", formatEth(launch.liquidityEth)],
-          ["Price", formatEth(launch.priceEth)],
+          ["Market cap", formatValue(launch.marketCapEth, usd)],
+          ["Liquidity", formatValue(launch.liquidityEth, usd)],
+          ["Price", formatValue(launch.priceEth, usd)],
           ["Age", formatAge(launch.launchedAt)],
         ].map(([label, value]) => (
           <div key={label} className="space-y-1 px-4 py-3 sm:px-5">
@@ -220,7 +228,7 @@ export function TokenDetail({ slug }: { slug: string }) {
           « pas encore lu » ne sont pas la même information. */}
       <div className="mt-2 grid divide-y rounded-2xl border sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
         {[
-          ["24h volume", indexed((a) => formatEth(a.volume24h))],
+          ["24h volume", indexed((a) => formatValue(a.volume24h, usd))],
           ["24h change", indexed((a) => (a.change24h === null ? "No trade 24h ago" : `${a.change24h >= 0 ? "+" : ""}${a.change24h.toFixed(1)}%`))],
           ["Trades", indexed((a) => a.trades.toLocaleString("en-US"))],
           ["Holders", indexed((a) => a.holders.toLocaleString("en-US"))],
@@ -234,7 +242,10 @@ export function TokenDetail({ slug }: { slug: string }) {
         ))}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,360px)]">
+      {/* `items-start` : sans lui, la grille étire chaque colonne à la hauteur
+          de la plus haute, et une colonne étirée fausse tout calcul de hauteur
+          en pourcentage à l'intérieur. */}
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[1fr_minmax(0,360px)]">
         <div className="space-y-4">
           {/* Le prix d'hier n'est pas un état : il est reconstruit en relisant
               les Swap du pool. C'est ce que fait /api/activity, et la courbe
