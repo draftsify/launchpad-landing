@@ -1,6 +1,7 @@
 import { formatEther } from "viem";
 
 import { LAUNCHER_ADDRESS, isDeployed, publicClient } from "@/lib/chain";
+import { isHidden } from "@/lib/hidden";
 import { launcherAbi, lockerAbi, tokenAbi } from "@/lib/launcher";
 import { parseMetadata, type TokenMetadata } from "@/lib/metadata";
 import type { Rules } from "@/lib/presets";
@@ -127,7 +128,7 @@ export async function readLaunches(): Promise<Launch[]> {
 
   const launches = await Promise.all(addresses.map(readLaunch));
   return launches
-    .filter((l): l is Launch => l !== null)
+    .filter((l): l is Launch => l !== null && !isHidden(l.address))
     .sort((a, b) => b.launchedAt - a.launchedAt);
 }
 
@@ -162,6 +163,9 @@ export async function readRules(): Promise<Rules | null> {
 
 export async function readLaunchBySlug(slug: string): Promise<Launch | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(slug)) return null;
+  // Masqué de la liste veut dire masqué de son adresse directe : sinon un lien
+  // partagé continue de servir la page, et le retrait n'en est pas un.
+  if (isHidden(slug)) return null;
   return readLaunch(slug.toLowerCase() as `0x${string}`);
 }
 

@@ -1,0 +1,31 @@
+/**
+ * Tokens que ce site ne liste pas.
+ *
+ * À lire pour ce que c'est : une décision éditoriale d'une interface, pas une
+ * propriété du protocole. Le launcher n'a ni propriétaire ni administrateur, et
+ * personne — nous compris — ne peut supprimer un token, fermer son pool ou
+ * empêcher qui que ce soit de l'échanger par contrat direct ou depuis une autre
+ * interface. Masquer ici ne fait pas disparaître, et prétendre le contraire
+ * serait mentir aux gens qui détiennent ce token.
+ *
+ * La liste est donc versionnée, en clair, avec un motif par entrée : une
+ * décision qu'on assume s'écrit là où elle se vérifie. Elle reste volontairement
+ * étroite — l'usurpation d'identité du launchpad lui-même, rien d'autre. Un
+ * launchpad qui filtre selon ses goûts a cessé d'être neutre, et sa promesse de
+ * découverte des prix avec.
+ */
+export const HIDDEN: { address: string; reason: string }[] = [
+  {
+    // Lancé quelques minutes après l'ouverture des créations, sous le nom et le
+    // symbole du launchpad lui-même, par une adresse sans rapport avec le
+    // projet. Un visiteur ne peut pas le distinguer d'un token officiel.
+    address: "0x7416f459608a26270930d282a5393bcf1d2c849c",
+    reason: "Se fait passer pour le token officiel du launchpad",
+  },
+];
+
+const SET = new Set(HIDDEN.map((h) => h.address.toLowerCase()));
+
+export function isHidden(address: string) {
+  return SET.has(address.toLowerCase());
+}
