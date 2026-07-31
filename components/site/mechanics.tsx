@@ -27,10 +27,13 @@ const EASE = [0.16, 1, 0.3, 1] as const;
  * 10 % au départ, puis une droite jusqu'à 100 %.
  */
 const TIME = [
-  { id: "0", label: "0 min", unlocked: 10 },
-  { id: "5", label: "5 min", unlocked: 40 },
-  { id: "10", label: "10 min", unlocked: 70 },
-  { id: "15", label: "15 min", unlocked: 100 },
+  // Libellés courts, comme ceux de la rangée du dessous : quatre pastilles
+  // doivent tenir côte à côte dans une colonne étroite, et « 0 min » y passait
+  // à la ligne. L'unité est portée par l'intitulé du contrôle.
+  { id: "0", label: "0m", unlocked: 10 },
+  { id: "5", label: "5m", unlocked: 40 },
+  { id: "10", label: "10m", unlocked: 70 },
+  { id: "15", label: "15m", unlocked: 100 },
 ];
 
 /**
@@ -84,7 +87,9 @@ function Control({
               onFocus={() => onChange(option.id)}
               onClick={() => onChange(option.id)}
               className={cn(
-                "h-7 rounded-full border px-2.5 font-mono text-xs transition-colors",
+                // whitespace-nowrap : la pastille a une hauteur fixe, donc un
+                // libellé qui passe à la ligne en déborde au lieu de l'agrandir.
+                "h-7 rounded-full border px-2.5 font-mono text-xs whitespace-nowrap transition-colors",
                 active
                   ? "border-foreground/30 bg-foreground text-background"
                   : "bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -198,7 +203,7 @@ export function Mechanics() {
           <Control
             /* Depuis l'achat, pas depuis le lancement : chaque position a son
                propre calendrier, et quelqu'un qui entre tard repart de 10 %. */
-            label="Time since the buy"
+            label="Time since the buy (min)"
             options={TIME}
             value={time}
             onChange={setTime}
