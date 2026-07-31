@@ -67,6 +67,12 @@ elif [ -n "${ACCOUNT:-}" ]; then
   # affaiblir : elle est vérifiée contre ce que le keystore contient vraiment,
   # juste après, et une adresse fausse arrête tout.
   SENDER="${SENDER:-$(cast wallet address --account "$ACCOUNT")}"
+  # Une invite qui n'affiche rien pendant la frappe se lit comme une invite qui
+  # ne répond pas. KEYSTORE_PASSWORD lève l'ambiguïté, au prix d'un mot de passe
+  # dans l'historique du shell — acceptable seulement parce que ce keystore ne
+  # protège rien : le déployeur ne reçoit aucun pouvoir, et sa clé existe déjà
+  # ailleurs. Ne pas transposer ce raccourci à un keystore qui garde des fonds.
+  [ -n "${KEYSTORE_PASSWORD:-}" ] && SIGNER+=(--password "$KEYSTORE_PASSWORD")
 else
   echo "Aucune méthode de signature. Choisissez-en une :" >&2
   echo "  LEDGER=1 bash scripts/deploy-mainnet.sh      # rien sur le disque" >&2
