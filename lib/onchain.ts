@@ -318,6 +318,60 @@ export async function readClaimable(): Promise<Claimable[]> {
   return rows.filter((row): row is Claimable => row !== null);
 }
 
+export type Holding = {
+  address: `0x${string}`;
+  name: string;
+  symbol: string;
+  balance: bigint;
+  /** Ce qui peut sortir maintenant. Le reste attend `unlockSeconds`. */
+  releasable: bigint;
+};
+
+/**
+ * Les tokens Reveal qu'une adresse détient, avec ce qu'elle peut vendre.
+ *
+ * Sert à la trésorerie, qui reçoit la moitié de ses frais en tokens et veut les
+ * ramener en ETH. La part vendable est lue et non déduite : le protocole ne
+ * s'exempte pas de ses propres règles, donc ces tokens se libèrent au même
+ * rythme que ceux de n'importe qui — un dixième tout de suite, tout au bout
+ * d'un quart d'heure.
+ */
+export async function readHoldings(owner: `0x${string}`): Promise<Holding[]> {
+  const launches = await readLaunches();
+
+  const rows = await Promise.all(
+    launches.map(async (launch) => {
+      try {
+        const base = { address: launch.address, abi: tokenAbi } as const;
+        const [balance, releasable] = await Promise.all([
+          publicClient.readContract({
+            ...base,
+            functionName: "balanceOf",
+            args: [owner],
+          }),
+          publicClient.readContract({
+            ...base,
+            functionName: "releasable",
+            args: [owner],
+          }),
+        ]);
+        if (balance === 0n) return null;
+        return {
+          address: launch.address,
+          name: launch.name,
+          symbol: launch.symbol,
+          balance,
+          releasable,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return rows.filter((row): row is Holding => row !== null);
+}
+
 export async function readLaunchBySlug(slug: string): Promise<Launch | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(slug)) return null;
   // Masqué de la liste veut dire masqué de son adresse directe : sinon un lien
