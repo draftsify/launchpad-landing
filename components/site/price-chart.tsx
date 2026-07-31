@@ -3,7 +3,8 @@
 import { useId, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
-import { formatEth } from "@/lib/format";
+import { formatValue } from "@/lib/format";
+import { useEthPrice } from "@/components/site/use-eth-price";
 import type { PricePoint } from "@/lib/indexer";
 
 const HEIGHT = 200;
@@ -34,6 +35,9 @@ export function PriceChart({ points }: { points: PricePoint[] }) {
   const gradient = useId();
   const reduce = useReducedMotion();
   const [hovered, setHovered] = useState<number | null>(null);
+  // Même unité que les tuiles au-dessus : deux unités pour un même prix, sur un
+  // même écran, se lisent comme deux prix différents.
+  const usd = useEthPrice();
 
   if (points.length < 2) {
     return (
@@ -67,7 +71,7 @@ export function PriceChart({ points }: { points: PricePoint[] }) {
     <div className="space-y-3">
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <p className="font-mono text-lg">{formatEth(points[active].price)}</p>
+          <p className="font-mono text-lg">{formatValue(points[active].price, usd)}</p>
           <p className="text-xs text-muted-foreground">{label(points[active].time)}</p>
         </div>
         {change !== null && (

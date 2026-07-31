@@ -5,7 +5,8 @@ import { ArrowUpRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import type { TokenActivity } from "@/lib/activity";
-import { formatAge, formatEth } from "@/lib/format";
+import { formatAge, formatValue } from "@/lib/format";
+import { useEthPrice } from "@/components/site/use-eth-price";
 import { slugOf, type Launch } from "@/lib/onchain";
 import { CopyAddress } from "@/components/site/copy-address";
 import { TokenMark } from "@/components/site/token-mark";
@@ -45,6 +46,9 @@ export function TokenCard({
   index?: number;
 }) {
   const reduce = useReducedMotion();
+  // Meme unite que la page du token : deux unites pour un meme chiffre, sur
+  // deux ecrans qui se suivent, se lisent comme deux chiffres.
+  const usd = useEthPrice();
   const change = activity?.change24h ?? null;
 
   return (
@@ -90,7 +94,7 @@ export function TokenCard({
 
             <div>
               <p className="flex flex-wrap items-baseline gap-2 text-3xl font-medium tracking-tight tabular-nums sm:text-4xl">
-                {formatEth(launch.marketCapEth)}
+                {formatValue(launch.marketCapEth, usd)}
                 {change !== null && (
                   <span
                     className={cn(
@@ -118,9 +122,9 @@ export function TokenCard({
 
         <div className="grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
           <Stat label="24h volume">
-            {activity ? formatEth(activity.volume24h) : "—"}
+            {activity ? formatValue(activity.volume24h, usd) : "—"}
           </Stat>
-          <Stat label="Liquidity">{formatEth(launch.liquidityEth)}</Stat>
+          <Stat label="Liquidity">{formatValue(launch.liquidityEth, usd)}</Stat>
           <Stat label="Age">{formatAge(launch.launchedAt)}</Stat>
           <Stat label="Contract">
             {/* Au-dessus du calque de lien, sinon copier navigue. */}

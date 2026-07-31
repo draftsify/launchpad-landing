@@ -5,7 +5,8 @@ import { Coins, Loader2, TriangleAlert } from "lucide-react";
 
 import { activeChain, isDeployed } from "@/lib/chain";
 import { dailyLaunches, statsFrom } from "@/lib/analytics";
-import { formatEth } from "@/lib/format";
+import { formatValue } from "@/lib/format";
+import { useEthPrice } from "@/components/site/use-eth-price";
 import { BarChart } from "@/components/site/bar-chart";
 import { useProtocolActivity } from "@/components/site/use-activity";
 import { CountUp } from "@/components/site/count-up";
@@ -33,6 +34,7 @@ export function AnalyticsDashboard() {
   const { data: launches, loading, error } = useLaunches();
   // Volume et trades ne sont pas des états : ils viennent des journaux.
   const activity = useProtocolActivity();
+  const usd = useEthPrice();
 
   /** Un tiret tant que la relecture n'a rien rendu — pas un zéro. */
   const traded = (read: (a: NonNullable<typeof activity.data>) => string) =>
@@ -144,8 +146,8 @@ export function AnalyticsDashboard() {
       <div className="rounded-2xl border bg-card p-5 sm:p-6">
         <div className="grid gap-6 sm:grid-cols-3 sm:divide-x sm:divide-border">
           {[
-            ["24h volume", traded((a) => formatEth(a.volume24h))],
-            ["Total volume", traded((a) => formatEth(a.volumeTotal))],
+            ["24h volume", traded((a) => formatValue(a.volume24h, usd))],
+            ["Total volume", traded((a) => formatValue(a.volumeTotal, usd))],
             [
               "Trades",
               traded((a) => `${a.trades.toLocaleString("en-US")} (${a.trades24h} in 24h)`),
