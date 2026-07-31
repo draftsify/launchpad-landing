@@ -8,8 +8,33 @@ export const launcherAbi = parseAbi([
   "function tokenCount() view returns (uint256)",
   "function tokens(uint256) view returns (address)",
   "function supply() view returns (uint256)",
-  "function rules() view returns (uint16 initialUnlockBps, uint32 unlockSeconds, uint16 impactCapBps, uint32 impactWindow, uint32 launchDelay, uint32 buyRamp)",
-  "event Launched(address indexed token, address indexed creator, address pool, uint256 supply, int24 tickLower, int24 tickUpper, (uint16,uint32,uint16,uint32,uint32,uint32) rules)",
+  "function rules() view returns (uint16 initialUnlockBps, uint32 unlockSeconds, uint32 launchDelay, uint32 buyRamp)",
+  "function locker() view returns (address)",
+  "function launches(address token) view returns (address pool, uint256 tokenId, uint128 liquidity, int24 tickLower, int24 tickUpper, address creator, uint64 launchedAt)",
+  "event Launched(address indexed token, address indexed creator, address pool, uint256 tokenId, uint256 supply, uint128 liquidity, int24 tickLower, int24 tickUpper, (uint16,uint32,uint32,uint32) rules)",
+]);
+
+/**
+ * Le locker : propriétaire définitif de la position, collecteur de frais, et
+ * seul juge de la graduation.
+ *
+ * `graduationProgress` ne lit pas le solde WETH du pool mais la quote que
+ * *notre* position contient réellement au prix courant. Un virement direct au
+ * pool ne la bouge donc pas — c'est ce qui distingue un jalon d'un chiffre
+ * qu'on peut s'offrir.
+ */
+export const lockerAbi = parseAbi([
+  "function treasury() view returns (address)",
+  "function positions(address token) view returns (address pool, uint256 tokenId, int24 tickLower, int24 tickUpper, uint128 liquidity, address creator, bool quoteIsToken0)",
+  "function liquidityNow(address token) view returns (uint128)",
+  "function positionOwner(address token) view returns (address)",
+  "function graduationProgress(address token) view returns (uint256)",
+  "function graduated(address token) view returns (bool)",
+  "function syncGraduation(address token)",
+  "function collect(address token) returns (uint256 amount0, uint256 amount1)",
+  "function GRADUATION_QUOTE() view returns (uint256)",
+  "event Collected(address indexed token, uint256 amount0, uint256 amount1)",
+  "event Graduated(address indexed token, address indexed pool, uint256 quoteAmount)",
 ]);
 
 export const tokenAbi = parseAbi([
@@ -24,9 +49,14 @@ export const tokenAbi = parseAbi([
   // qu'échouer en « TF », et l'interface n'a rien à dire à l'utilisateur.
   "function maxBuyNow() view returns (uint256)",
   "function buyOpensAt() view returns (uint256)",
+  // `releasable` est le nom canonique : les deux portes de sortie ont fusionné,
+  // il n'y a plus qu'un seul nombre. `windowRemaining` a disparu avec le
+  // plafond d'impact, et `sellableNow` n'est plus qu'un alias conservé pour les
+  // intégrations existantes.
   "function releasable(address holder) view returns (uint256)",
-  "function windowRemaining(address holder) view returns (uint256)",
+  "function lockedOf(address holder) view returns (uint256)",
   "function unlockedBps(address holder) view returns (uint256)",
+  "function drawdownTicks(address holder) view returns (uint256)",
   "function balanceOf(address holder) view returns (uint256)",
 ]);
 

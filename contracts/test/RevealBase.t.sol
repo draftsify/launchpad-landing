@@ -4,9 +4,11 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 
 import {RevealLauncher} from "../src/RevealLauncher.sol";
+import {RevealLocker} from "../src/RevealLocker.sol";
 import {RevealToken} from "../src/RevealToken.sol";
 import {IUniswapV3Factory, IUniswapV3Pool} from "../src/interfaces/IUniswapV3.sol";
 import {Rules} from "../src/libraries/RevealRules.sol";
+import {MockPositionManager} from "./mocks/MockPositionManager.sol";
 import {TestSwapRouter} from "./mocks/TestSwapRouter.sol";
 import {WETH9} from "./mocks/WETH9.sol";
 
@@ -24,22 +26,20 @@ abstract contract RevealBase is Test {
     string internal constant METADATA_URI = "ipfs://bafyreiRevealDemoMetadataCid";
     uint24 internal constant FEE = 10_000; // 1 %, tick spacing 200
     uint16 internal constant CARDINALITY = 120;
+    uint16 internal constant BPS = 10_000;
 
-    /**
-     * Plage de la position, exprimée du point de vue « notre token est token0 »,
-     * donc en quote par token. Bas : capitalisation de départ ≈ 1,5 ETH sur un
-     * milliard de tokens. Haut : environ 11× plus loin, ce qui fait qu'une
-     * traversée complète de la plage accumule à peu près 5 ETH — la moyenne
-     * géométrique des deux bornes, multipliée par la supply.
-     */
-    int24 internal constant TICK_LOW = -203_200;
-    int24 internal constant TICK_HIGH = -179_000;
+    /// La liquidité que doit produire un milliard de tokens sur la plage, dans
+    /// les deux ordres. Relevée sur les 214 052 positions du launchpad de
+    /// référence : toutes portent exactement cette valeur.
+    uint128 internal constant PONS_LIQUIDITY = 36_819_258_015_569_838_458_222;
 
     WETH9 internal weth;
     IUniswapV3Factory internal amm;
+    MockPositionManager internal manager;
     ITickMathExposer internal tickMath;
     TestSwapRouter internal router;
     RevealLauncher internal launcher;
+    RevealLocker internal locker;
     RevealToken internal token;
     IUniswapV3Pool internal pool;
     /// Mis en cache : les helpers ne doivent contenir aucun appel externe avant
@@ -56,8 +56,6 @@ abstract contract RevealBase is Test {
         return Rules({
             initialUnlockBps: 1_000, // 10 %
             unlockSeconds: 1 hours,
-            impactCapBps: 1_000, // 10 % de la réserve de quote
-            impactWindow: 5 minutes,
             launchDelay: 5,
             buyRamp: 10 minutes
         });
@@ -68,32 +66,16 @@ abstract contract RevealBase is Test {
 
         launcher = new RevealLauncher(
             address(amm),
+            address(manager),
             address(weth),
-            FEE,
             CARDINALITY,
             SUPPLY,
             treasury,
-            defaultRules(),
-            _range(TICK_LOW, TICK_HIGH),
-            // Quand notre token est token1 le prix s'inverse : la plage est la
-            // symétrique par rapport à zéro, bornes échangées.
-            _range(-TICK_HIGH, -TICK_LOW)
+            defaultRules()
         );
+        locker = launcher.locker();
 
         _launch();
-    }
-
-    function _range(int24 lower, int24 upper)
-        internal
-        view
-        returns (RevealLauncher.Range memory)
-    {
-        return RevealLauncher.Range({
-            tickLower: lower,
-            tickUpper: upper,
-            sqrtLower: tickMath.sqrtRatioAt(lower),
-            sqrtUpper: tickMath.sqrtRatioAt(upper)
-        });
     }
 
     function _setUpEnvironment() internal virtual {
@@ -103,17 +85,15 @@ abstract contract RevealBase is Test {
         weth = new WETH9();
         router = new TestSwapRouter();
         // v3-core est en 0.7.6 : chargé par artefact, pas par import.
-        amm = IUniswapV3Factory(
-            deployCode("UniswapV3Factory.sol:UniswapV3Factory")
-        );
+        amm = IUniswapV3Factory(deployCode("UniswapV3Factory.sol:UniswapV3Factory"));
+        manager = new MockPositionManager(address(amm), address(weth));
         tickMath = ITickMathExposer(deployCode("TickMathExposer.sol:TickMathExposer"));
     }
 
     /// Le créateur ne paie que le gas : la liquidité est unilatérale.
     function _launch() internal {
         vm.prank(creator);
-        (address t, address p) =
-            launcher.launch("Reveal", "REVEAL", METADATA_URI);
+        (address t, address p) = launcher.launch("Reveal", "REVEAL", METADATA_URI);
         token = RevealToken(t);
         pool = IUniswapV3Pool(p);
         tokenFirst = token.tokenIsToken0();
@@ -160,7 +140,7 @@ abstract contract RevealBase is Test {
         token.transfer(address(pool), amountIn);
     }
 
-    /// Laisse le token vendable : au-delà de `unlockSeconds`, le temps a tout ouvert.
+    /// Au-delà de `unlockSeconds`, le temps a tout ouvert.
     function _fullyUnlock() internal {
         _warp(1 hours + 1);
     }
@@ -174,5 +154,9 @@ abstract contract RevealBase is Test {
     function _warp(uint256 seconds_) internal {
         vm.warp(block.timestamp + seconds_);
         vm.roll(block.number + seconds_ / 2 + 1);
+    }
+
+    function _initialUnlockBps() internal view returns (uint256 v) {
+        (v,,,) = token.rules();
     }
 }

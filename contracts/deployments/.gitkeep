@@ -1,0 +1,2 @@
+# Le manifeste de deploiement y est ecrit par script/Deploy.s.sol.
+# Git ne transporte pas un dossier vide, et vm.writeJson ne le cree pas.

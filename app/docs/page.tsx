@@ -19,11 +19,12 @@ import { LaunchButton } from "@/components/site/launch-button";
 import {
   ERRORS,
   EVENTS,
-  IMPACT_PARAMS,
+  GRADUATION_PARAMS,
   RELIEF_PARAMS,
   SNIPER_PARAMS,
   UNLOCK_PARAMS,
 } from "@/lib/docs";
+import { GRADUATION_QUOTE_ETH } from "@/lib/presets";
 
 export const metadata: Metadata = {
   title: "Docs — Reveal",
@@ -68,8 +69,8 @@ export default function DocsPage() {
               </Prose>
               <Prose>
                 Three rules do the work: a time-based unlock, relief that
-                accelerates when a position is underwater, and a cap on how much
-                any single position can move the pool within a window.
+                accelerates when a position is underwater, and a ramp on
+                how large a single buy may be in the opening minutes.
               </Prose>
               <Prose>
                 None of them is a setting. The creator picks a name, a symbol
@@ -147,12 +148,12 @@ function launch(
                   {
                     term: "4 · Discovery",
                     description:
-                      "Buys become positions. Sells are metered per position and per wallet window, so pressure arrives spread out rather than at once.",
+                      "Buys become positions. Every outgoing transfer -- to the pool or to another wallet -- is metered against that position, so pressure arrives spread out rather than at once.",
                   },
                   {
                     term: "5 · Steady state",
                     description:
-                      "Once every position has passed unlockSeconds, only the impact cap remains active.",
+                      "Once a position has passed unlockSeconds it is an ordinary ERC-20 balance. No cap, no window, no residual restriction.",
                   },
                 ]}
               />
@@ -166,51 +167,69 @@ function launch(
               lede="The unit of accounting is the buy, not the wallet."
             >
               <Prose>
-                A wallet holds one position, and every buy folds into it:
-                entry time and entry price are re-weighted by amount. Topping
-                up therefore makes a position younger, which is exactly what
-                the rule should do.
+                A wallet carries one locked tranche. A buy folds into it: what
+                is <em>still</em> locked from before is added to the locked
+                share of the new buy, and the clock restarts on the sum. Topping
+                up therefore makes the locked remainder younger, which is what
+                the rule should do — while everything already free stays free.
               </Prose>
               <Code>{`struct Position {
-    uint64  entryTime;      // weighted average, moves down on every buy
-    int24   basisTick;      // spot tick at entry, not TWAP
-    uint128 basisAmount;    // everything the position ever received
-    uint128 releasedTotal;  // what it has already let out
-    uint128 soldInWindow;   // leaky bucket for the impact cap
-    uint64  soldAt;
+    uint64  lockStart;    // reset by every buy
+    int24   lockTick;     // entry price of what is still locked
+    uint128 lockedBasis;  // size whose (10_000 - unlockedBps) share is locked
 }`}</Code>
               <Prose>
-                The unlock budget is measured against everything the position
-                ever received, minus what it has already released — never
-                against the current balance. Against the balance, selling 10%
-                would immediately reopen 10% of the remainder.
+                Note what is <em>not</em> stored: any record of what the
+                position has already released. An earlier version kept a
+                running <Inline>releasedTotal</Inline> and compared it to a
+                recomputed budget — and that debt outlived the position. Exit
+                almost entirely, leave a wei of dust, buy again, and the old
+                debt was set against the new purchase: the buy started with
+                nothing releasable, though the protocol promises{" "}
+                {`${10}`}% immediately.
+              </Prose>
+              <Prose>
+                The free amount is now a subtraction rather than a ledger, so
+                there is no debt to outlive anything.
               </Prose>
             </DocSection>
 
             <DocSection
               id="sellable"
               title="Computing the sellable amount"
-              lede="Three inputs, then a cap."
+              lede="What you hold, minus what is still locked."
             >
-              <Code>{`releasable(holder) =
-    basisAmount
-  * max( timeUnlockedBps(now - entryTime),
+              <Code>{`unlockedBps(holder) =
+    max( timeUnlockedBps(now - lockStart),
          reliefBps(drawdownTicks(holder)) )
-  / 10_000
-  - releasedTotal
 
-sellableNow(holder) = min( releasable(holder), windowRemaining(holder) )`}</Code>
+lockedOf(holder) =
+    min( lockedBasis * (10_000 - unlockedBps) / 10_000,
+         balanceOf(holder) )
+
+releasable(holder) = balanceOf(holder) - lockedOf(holder)`}</Code>
+              <Prose>
+                Which gives the guarantee the accounting exists for: after any
+                buy of <Inline>amount</Inline>,{" "}
+                <Inline>releasable</Inline> is exactly what it was before plus{" "}
+                <Inline>amount × initialUnlockBps / 10_000</Inline>, whatever the
+                holder&apos;s history.
+              </Prose>
               <Prose>
                 Relief is a floor, not an addition. A position deep in drawdown
                 never unlocks <em>less</em> than its schedule already permits,
-                and a position in profit is never penalised for it.
+                and a position in profit is never penalised for it. The{" "}
+                <Inline>min</Inline> against the balance matters because relief
+                can recede: a holder who sold into a crash and then saw the
+                price recover would otherwise be locked above what they still
+                hold.
               </Prose>
-              <Callout title="Rejections are partial by nature" tone="warning">
+              <Callout title="Rejections are invisible through the router" tone="warning">
                 A sell above the limit reverts with{" "}
-                <Inline>PositionLocked</Inline> or{" "}
-                <Inline>ImpactCapExceeded</Inline>, each returning the amount
-                that would have succeeded. Uniswap swallows both — read{" "}
-                <Inline>sellableNow</Inline> first and offer that amount.
+                <Inline>PositionLocked</Inline>, returning the amount that would
+                have succeeded. Uniswap wraps transfers, so the user only ever
+                sees <Inline>TF</Inline> — read <Inline>releasable</Inline>{" "}
+                first and offer that amount.
               </Callout>
             </DocSection>
 
@@ -229,12 +248,12 @@ sellableNow(holder) = min( releasable(holder), windowRemaining(holder) )`}</Code
                   {
                     term: "The pool",
                     description:
-                      "One address, written at launch and never changed. Tokens leaving toward it are a sell: both the unlock budget and the impact window apply.",
+                      "One address, written at launch and never changed. Tokens leaving toward it are a sell, and consume the position's unlock budget.",
                   },
                   {
                     term: "Wallet to wallet",
                     description:
-                      "Consumes the unlock budget exactly as a sale would, so splitting a position across ten addresses does not reset its schedule. The impact cap does not apply — no price moved.",
+                      "Consumes the unlock budget exactly as a sale would, so splitting a position across ten addresses does not reset its schedule. What arrives is therefore already unlocked, and the recipient is not re-locked.",
                   },
                   {
                     term: "Nothing is blocked outright",
@@ -244,7 +263,7 @@ sellableNow(holder) = min( releasable(holder), windowRemaining(holder) )`}</Code
                   {
                     term: "Protocol fees",
                     description:
-                      "Fees moving from the pool to the treasury are not counted as a buy, since no quote enters — counting them would inflate the impact cap's reference. They do open a position, so the protocol is bound by its own selling rules.",
+                      "Fees moving from the pool to the treasury skip the buy ramp, since collection is permissionless and must not depend on the clock. They do open a position, so the protocol is bound by its own selling rules.",
                   },
                 ]}
               />
@@ -264,7 +283,7 @@ sellableNow(holder) = min( releasable(holder), windowRemaining(holder) )`}</Code
               <Code>{`// 5 minute TWAP, read from the pool's own tick accumulator.
 // Ticks, not prices: 1.0001^n is not worth computing on chain.
 (int24 reference, bool fresh) = twapTick();  // !fresh -> no relief at all
-uint256 drop   = ticksBelow(basisTick, reference);
+uint256 drop   = ticksBelow(lockTick, reference);
 uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
               <Prose>
                 Entry price is the opposite: recorded at spot, not TWAP. The
@@ -296,10 +315,10 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
               <ParamTable params={UNLOCK_PARAMS} />
               <Prose>
                 The schedule does not depend on position size — a whale and a
-                small buyer unlock on the same curve. What separates them is the
-                impact cap, which is measured against the pool rather than
-                against the holder. Making the schedule itself size-aware is an
-                open design question, not a shipped feature.
+                small buyer unlock on the same curve. Nothing else separates
+                them either: once a position is unlocked it is an ordinary
+                ERC-20 balance. Making the schedule size-aware is an open design
+                question, not a shipped feature.
               </Prose>
             </DocSection>
 
@@ -319,21 +338,31 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
             </DocSection>
 
             <DocSection
-              id="impact"
-              title="Impact caps"
-              lede="A ceiling on how much one position can move the pool at once."
+              id="graduation"
+              title="Graduation"
+              lede="A milestone the pool reaches. Not a migration, and not a promise."
             >
-              <ParamTable params={IMPACT_PARAMS} />
+              <ParamTable params={GRADUATION_PARAMS} />
               <Prose>
-                The cap applies to fully unlocked positions too. It is measured
-                on a rolling window, so a refused remainder becomes available
-                again as the window slides rather than at a fixed reset.
+                At {GRADUATION_QUOTE_ETH} ETH the launch is called graduated.
+                That is the whole of it: the same token keeps trading in the
+                same pool, at the same fee tier, against the same locked
+                position, on the same ticks. No liquidity is withdrawn or
+                re-minted, no reserves move, no second DEX is involved, and no
+                permission or tax changes.
               </Prose>
-              <Callout title="Nothing sells before something buys">
-                The cap is a share of the pool&apos;s quote reserve, and that
-                reserve starts at zero. Until someone buys, the cap is zero and
-                no sell can pass. This falls out of one-sided liquidity rather
-                than being a rule of its own.
+              <Callout title="A donation cannot buy it">
+                Progress is the quote our own position actually holds at the
+                current price, derived from its ticks and liquidity — not the
+                pool&apos;s WETH balance. That balance would count a direct
+                transfer or an unrelated position, so anyone could trigger
+                graduation by sending ETH. A donation does not move the price,
+                so it does not move progress.
+              </Callout>
+              <Callout title="It is not a quality signal">
+                Graduation says a threshold of trading happened. It does not
+                mean the token is safe, that the team is real, or that an exit
+                will be available at any particular price.
               </Callout>
             </DocSection>
 
@@ -357,12 +386,14 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
               lede="The surface an integration needs."
             >
               <Code>{`interface IRevealToken {
-    // What a sell would execute right now: the binding one of the two.
-    function sellableNow(address holder) external view returns (uint256);
-
-    // The two limits, separately, when you need to explain which one bit.
+    // What may leave right now -- to the pool or to another wallet.
     function releasable(address holder) external view returns (uint256);
-    function windowRemaining(address holder) external view returns (uint256);
+    // Its complement. releasable + lockedOf == balanceOf, always.
+    function lockedOf(address holder) external view returns (uint256);
+
+    // The largest buy the ramp allows at this instant, and when buys open.
+    function maxBuyNow() external view returns (uint256);
+    function buyOpensAt() external view returns (uint256);
 
     // How open the position is, and how far under water.
     function unlockedBps(address holder) external view returns (uint256);
@@ -371,15 +402,37 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
 
     function rules() external view returns (Rules memory);
     function metadataURI() external view returns (string memory);
+}
+
+interface IRevealLocker {
+    // Status milestone. Nothing here moves liquidity.
+    function graduationProgress(address token) external view returns (uint256);
+    function graduated(address token) external view returns (bool);
+    function syncGraduation(address token) external;
+
+    // Permissionless, and always pays the immutable treasury.
+    function collect(address token) external returns (uint256, uint256);
+
+    // The invariants worth checking yourself.
+    function positionOwner(address token) external view returns (address);
+    function liquidityNow(address token) external view returns (uint128);
 }`}</Code>
               <Prose>
-                <Inline>sellableNow</Inline> is the call a front end must make
+                <Inline>releasable</Inline> is the call a front end must make
                 before enabling a sell button — and it is not optional. Uniswap
                 wraps token transfers in its own <Inline>_safeTransfer</Inline>,
                 so a rejected sell surfaces as the pool&apos;s{" "}
                 <Inline>TF</Inline>, never as our custom error. Reading the
                 failure afterwards tells the user nothing; reading the view
-                beforehand tells them the exact amount that works.
+                beforehand tells them the exact amount that works.{" "}
+                <Inline>maxBuyNow</Inline> is its counterpart on the buy side,
+                for the same reason.
+              </Prose>
+              <Prose>
+                <Inline>sellableNow</Inline> still exists as an alias of{" "}
+                <Inline>releasable</Inline>, kept for integrations written
+                against the earlier interface. There used to be two limits to
+                reconcile; there is now one number.
               </Prose>
               <Prose>
                 <Inline>fresh</Inline> is false while the pool has no oracle
@@ -430,7 +483,7 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
                   {
                     term: "Liquidity",
                     description:
-                      "The position belongs to RevealFees, which exposes nothing but burn(lower, upper, 0). Zero is hardcoded, not a parameter: it materialises accrued fees without withdrawing any liquidity. Locked as firmly as a dead address, minus the stranded fees.",
+                      "The Uniswap V3 position NFT is minted straight to RevealLocker and never belongs to anyone else -- not the creator, not the deployer, not the treasury, not an EOA. The locker cannot decrease liquidity, burn, approve or transfer it: those functions are absent from the interface it holds, not merely guarded. There is no owner, no rescue path and no upgrade path.",
                   },
                   {
                     term: "Trade fee",
@@ -460,7 +513,7 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
                 every block through elapsed time and price.
               </Prose>
               <Code>{`// derived, never stored -- or just ask the contract
-const sellable = await token.read.sellableNow([holder]);`}</Code>
+const sellable = await token.read.releasable([holder]);`}</Code>
               <Prose>
                 An indexer is not required to display a token: name, symbol and{" "}
                 <Inline>metadataURI</Inline> are all readable from a plain RPC
@@ -500,7 +553,7 @@ curl "$RPC" -d '{"method":"eth_getLogs","params":[{
                   {
                     term: "Multi-wallet splitting",
                     description:
-                      "Buying through many wallets sidesteps per-position sizing and per-position windows. The aim is to make that costly and visible, not impossible — any real fix would require identity, which this protocol will not do.",
+                      "Buying through many wallets gives each one its own independent position and its own schedule. The aim is to make that costly and visible, not impossible -- any real fix would require identity, which this protocol will not do. Once a balance is fully unlocked, splitting it across wallets is not an exploit: it is an ordinary ERC-20 doing what one does.",
                   },
                   {
                     term: "MEV",
@@ -520,7 +573,7 @@ curl "$RPC" -d '{"method":"eth_getLogs","params":[{
                   {
                     term: "Errors do not survive the pool",
                     description:
-                      "Uniswap wraps transfers, so a refused sell reaches the user as TF, not as PositionLocked. Any interface that skips the sellableNow view will show its users a failure it cannot explain.",
+                      "Uniswap wraps transfers, so a refused sell reaches the user as TF, not as PositionLocked. Any interface that skips the releasable view will show its users a failure it cannot explain.",
                   },
                   {
                     term: "History is recomputed, not stored",

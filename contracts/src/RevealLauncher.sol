@@ -1,134 +1,212 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-
 import {
-    IUniswapV3Factory, IUniswapV3MintCallback, IUniswapV3Pool
+    IUniswapV3Factory, IUniswapV3Pool
 } from "./interfaces/IUniswapV3.sol";
+import {INonfungiblePositionManager} from "./interfaces/INonfungiblePositionManager.sol";
+import {LiquidityAmounts} from "./libraries/LiquidityAmounts.sol";
 import {Rules, RevealRules} from "./libraries/RevealRules.sol";
-import {RevealFees} from "./RevealFees.sol";
+import {TickMath} from "./libraries/TickMath.sol";
+import {RevealLocker} from "./RevealLocker.sol";
 import {RevealToken} from "./RevealToken.sol";
 
 /**
  * Point d'entrée d'un lancement. Déploie le token, crée son pool Uniswap V3,
- * y place la supply entière en liquidité **unilatérale**, verrouille la
- * position, puis arme les règles.
+ * y place la supply entière en liquidité **unilatérale** via le
+ * NonfungiblePositionManager canonique, envoie le NFT de position au locker,
+ * puis arme les règles.
  *
- * Unilatéral veut dire : toute la supply est posée dans une plage de ticks
- * située au-dessus du prix de départ, donc la position est à 100 % en tokens et
- * à 0 % en quote. Personne n'avance de capital — ni le créateur, ni le
- * protocole. Ce sont les achats qui constituent la liquidité, en poussant le
- * prix à travers la plage. C'est ce que Uniswap V2 ne sait pas faire : il exige
- * les deux côtés.
+ * Unilatéral veut dire : toute la supply est posée dans une plage située d'un
+ * seul côté du prix de départ, donc la position est à 100 % en tokens et à 0 %
+ * en quote. Personne n'avance de capital — ni le créateur, ni le protocole. Ce
+ * sont les achats qui constituent la liquidité, en poussant le prix à travers
+ * la plage.
  *
- * La position appartient à `RevealFees`, qui n'expose qu'un `burn` à zéro —
- * lequel matérialise les frais sans toucher à la liquidité. Celle-ci est donc
- * aussi verrouillée qu'avec une adresse morte, mais les frais de swap restent
- * récupérables au profit de la trésorerie.
+ * La plage est celle du launchpad dominant de cette chaîne, au tick près, et
+ * pour deux raisons. D'abord la parité de courbe : à supply et palier de frais
+ * égaux, un même ordre doit déplacer le prix exactement pareil, ce que les
+ * tests différentiels vérifient. Ensuite l'étendue : le bord lointain, jamais
+ * atteint en pratique, garde le lancement dans le *même* pool après la
+ * graduation et évite l'épuisement de plage qu'une fourchette étroite provoque
+ * vers 5 ETH.
+ *
+ * Les prix de départ ne sont plus des paramètres de constructeur calculés hors
+ * chaîne : `TickMath` est embarqué, donc n'importe qui peut recalculer le prix
+ * initial à partir du seul tick, et le vérifier.
  */
-contract RevealLauncher is IUniswapV3MintCallback {
-    uint256 private constant Q96 = 1 << 96;
-
+contract RevealLauncher {
     /**
-     * Propriétaire des positions. Déployé ici, donc son `launcher` est
-     * forcément nous : aucune dépendance circulaire, et aucune fonction
-     * d'administration nulle part.
+     * Plage vue depuis « notre token est token0 », donc en quote par token :
+     * le départ est le bord bas et acheter fait monter le tick.
      */
-    RevealFees public immutable fees;
+    int24 public constant TICK_TOKEN0_LOWER = -204_200;
+    int24 public constant TICK_TOKEN0_UPPER = 887_200;
+    /// La symétrique : le prix s'inverse, le départ est le bord haut.
+    int24 public constant TICK_TOKEN1_LOWER = -887_200;
+    int24 public constant TICK_TOKEN1_UPPER = 204_200;
 
-    /**
-     * Plage de la position. Deux jeux sont nécessaires parce que l'ordre des
-     * tokens dans une paire dépend de leurs adresses, et que le prix s'inverse
-     * avec lui.
-     */
-    struct Range {
-        int24 tickLower;
-        int24 tickUpper;
-        uint160 sqrtLower;
-        uint160 sqrtUpper;
-    }
+    /// Palier 1 %, dont le tick spacing vaut 200 — vérifié sur la factory.
+    uint24 public constant FEE = 10_000;
+    int24 public constant TICK_SPACING = 200;
 
     IUniswapV3Factory public immutable ammFactory;
+    INonfungiblePositionManager public immutable positionManager;
+    /// Propriétaire définitif des positions, déployé ici : son `launcher` est
+    /// donc forcément nous, sans dépendance circulaire ni administration.
+    RevealLocker public immutable locker;
     address public immutable quote;
-    uint24 public immutable fee;
     uint16 public immutable observationCardinality;
     /**
      * Supply identique pour tout lancement. Ce n'est pas un choix esthétique :
      * la plage de ticks fixe un prix par token, donc la capitalisation de
      * départ vaut supply × ce prix. Laisser la supply varier ferait varier la
-     * capitalisation initiale dans la même proportion.
+     * capitalisation initiale dans la même proportion — et romprait la parité
+     * de courbe que les tests différentiels vérifient.
      */
     uint256 public immutable supply;
     /**
      * Règles identiques pour tout lancement. Les laisser au choix du créateur
      * revenait à laisser chacun choisir combien il se contraint — ce qui n'est
-     * plus une contrainte. Elles sont écrites une fois ici, et le launcher n'a
-     * aucune fonction pour les modifier.
+     * plus une contrainte.
      */
     Rules public rules;
 
-    Range public rangeIfToken0;
-    Range public rangeIfToken1;
+    struct Launch {
+        address pool;
+        uint256 tokenId;
+        uint128 liquidity;
+        int24 tickLower;
+        int24 tickUpper;
+        address creator;
+        uint64 launchedAt;
+    }
 
+    mapping(address token => Launch) public launches;
     address[] public tokens;
-    /// Renseigné le temps d'un `mint`, pour authentifier le rappel.
-    address private minting;
 
     /**
      * `name`, `symbol` et `metadataURI` ne sont pas répétés ici : ils se lisent
-     * sur le token, et les inclure saturait la pile du compilateur. Un indexeur
-     * les récupère par appel au moment où il traite l'événement.
+     * sur le token, et les inclure saturait la pile du compilateur.
      */
     event Launched(
         address indexed token,
         address indexed creator,
         address pool,
+        uint256 tokenId,
         uint256 supply,
+        uint128 liquidity,
         int24 tickLower,
         int24 tickUpper,
         Rules rules
     );
 
+    error NotAContract(address who);
+    error ZeroAddress();
     error SupplyOutOfRange();
     error PoolAlreadyExists();
-    error BadRange();
-    error UnexpectedCallback();
-    error NothingMinted();
+    error UnexpectedTickSpacing(int24 spacing);
+    error TickNotOnSpacing(int24 tick);
+    error FactoryMismatch(address expected, address actual);
+    error QuoteWasSpent(uint256 amount);
+    error SupplyNotDeposited(uint256 expected, uint256 actual);
+    error LiquidityMismatch(uint128 expected, uint128 actual);
+    error WrongInitialTick(int24 expected, int24 actual);
+    error Reentrancy();
+
+    uint256 private _entered;
+
+    modifier nonReentrant() {
+        if (_entered == 1) revert Reentrancy();
+        _entered = 1;
+        _;
+        _entered = 0;
+    }
 
     constructor(
         address ammFactory_,
+        address positionManager_,
         address quote_,
-        uint24 fee_,
         uint16 observationCardinality_,
         uint256 supply_,
         address treasury_,
-        Rules memory rules_,
-        Range memory rangeIfToken0_,
-        Range memory rangeIfToken1_
+        Rules memory rules_
     ) {
-        _check(rangeIfToken0_);
-        _check(rangeIfToken1_);
+        // Une adresse sans code est la panne silencieuse par excellence : tous
+        // les appels réussiraient en ne faisant rien.
+        _mustBeContract(ammFactory_);
+        _mustBeContract(positionManager_);
+        _mustBeContract(quote_);
+        // La trésorerie fait exception, et c'est délibéré : c'est un wallet.
+        // Exiger du code y interdirait le cas normal.
+        if (treasury_ == address(0)) revert ZeroAddress();
 
         ammFactory = IUniswapV3Factory(ammFactory_);
+        positionManager = INonfungiblePositionManager(positionManager_);
         quote = quote_;
-        fee = fee_;
+
+        // Le PositionManager doit servir la factory que nous interrogeons,
+        // sinon les pools créés et les positions frappées vivent ailleurs.
+        address pmFactory = INonfungiblePositionManager(positionManager_).factory();
+        if (pmFactory != ammFactory_) revert FactoryMismatch(ammFactory_, pmFactory);
+
+        // Le palier doit exister, et avoir l'espacement que les ticks supposent.
+        int24 spacing = IUniswapV3Factory(ammFactory_).feeAmountTickSpacing(FEE);
+        if (spacing != TICK_SPACING) revert UnexpectedTickSpacing(spacing);
+        _mustBeOnSpacing(TICK_TOKEN0_LOWER);
+        _mustBeOnSpacing(TICK_TOKEN0_UPPER);
+        _mustBeOnSpacing(TICK_TOKEN1_LOWER);
+        _mustBeOnSpacing(TICK_TOKEN1_UPPER);
+
         observationCardinality = observationCardinality_;
         if (supply_ < 1e18 || supply_ > 1e36) revert SupplyOutOfRange();
         supply = supply_;
         RevealRules.validate(rules_);
         rules = rules_;
-        fees = new RevealFees(treasury_);
-        rangeIfToken0 = rangeIfToken0_;
-        rangeIfToken1 = rangeIfToken1_;
+
+        locker = new RevealLocker(positionManager_, treasury_);
     }
 
-    function _check(Range memory r) private pure {
-        if (r.tickLower >= r.tickUpper || r.sqrtLower >= r.sqrtUpper) revert BadRange();
+    function _mustBeContract(address who) private view {
+        if (who == address(0)) revert ZeroAddress();
+        if (who.code.length == 0) revert NotAContract(who);
+    }
+
+    function _mustBeOnSpacing(int24 tick) private pure {
+        if (tick % TICK_SPACING != 0) revert TickNotOnSpacing(tick);
     }
 
     function tokenCount() external view returns (uint256) {
         return tokens.length;
+    }
+
+    /**
+     * Liquidité que la supply représente sur la plage, dérivée et non transcrite.
+     *
+     * Publique parce que c'est le nombre à confronter à la chaîne : pour une
+     * supply d'un milliard, elle doit valoir exactement celle des positions du
+     * launchpad de référence, dans les deux ordres de tokens.
+     */
+    function expectedLiquidity(bool tokenIsToken0) public view returns (uint128) {
+        (int24 lower, int24 upper) = ticksFor(tokenIsToken0);
+        uint160 sqrtLower = TickMath.getSqrtRatioAtTick(lower);
+        uint160 sqrtUpper = TickMath.getSqrtRatioAtTick(upper);
+
+        return tokenIsToken0
+            ? LiquidityAmounts.liquidityForAmount0(sqrtLower, sqrtUpper, supply)
+            : LiquidityAmounts.liquidityForAmount1(sqrtLower, sqrtUpper, supply);
+    }
+
+    function ticksFor(bool tokenIsToken0) public pure returns (int24 lower, int24 upper) {
+        return tokenIsToken0
+            ? (TICK_TOKEN0_LOWER, TICK_TOKEN0_UPPER)
+            : (TICK_TOKEN1_LOWER, TICK_TOKEN1_UPPER);
+    }
+
+    /// Le tick auquel le pool s'ouvre : le bord où la position est à 100 % en
+    /// tokens et à 0 % en quote.
+    function initialTick(bool tokenIsToken0) public pure returns (int24) {
+        return tokenIsToken0 ? TICK_TOKEN0_LOWER : TICK_TOKEN1_UPPER;
     }
 
     /**
@@ -142,77 +220,133 @@ contract RevealLauncher is IUniswapV3MintCallback {
         string calldata name,
         string calldata symbol,
         string calldata metadataURI
-    ) external returns (address token, address pool) {
+    ) external nonReentrant returns (address token, address pool) {
         RevealToken deployed = new RevealToken(name, symbol, metadataURI, supply, rules);
         token = address(deployed);
 
-        if (ammFactory.getPool(token, quote, fee) != address(0)) revert PoolAlreadyExists();
-        pool = ammFactory.createPool(token, quote, fee);
+        if (ammFactory.getPool(token, quote, FEE) != address(0)) revert PoolAlreadyExists();
 
-        Range memory r = _seed(pool, token);
+        bool tokenIsToken0 = token < quote;
+        pool = _seed(token, tokenIsToken0);
 
         // Sans cet appel la cardinalité vaut 1 : aucun historique, donc aucun
         // TWAP, donc aucun drawdown relief tant que le pool n'a pas grandi.
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinality);
 
-        fees.register(token, pool, r.tickLower, r.tickUpper);
-        deployed.initialize(pool, quote, fees.treasury());
+        deployed.initialize(pool, quote, locker.treasury());
         tokens.push(token);
 
-        emit Launched(token, msg.sender, pool, supply, r.tickLower, r.tickUpper, rules);
+        Launch memory l = launches[token];
+        emit Launched(
+            token,
+            msg.sender,
+            pool,
+            l.tokenId,
+            supply,
+            l.liquidity,
+            l.tickLower,
+            l.tickUpper,
+            rules
+        );
     }
 
     /**
-     * Ouvre le pool au bord de la plage et y verse toute la supply.
+     * Ouvre le pool au bord de la plage, y verse toute la supply, et fait
+     * frapper le NFT directement au locker.
      *
-     * Le prix initial est exactement celui du bord côté token : v3 calcule
-     * alors une quantité nulle de l'autre actif, ce qui est précisément la
-     * définition d'une position unilatérale.
+     * « Directement » est la garantie qui compte : la position n'appartient à
+     * aucun instant au créateur, au déployeur, à la trésorerie ni à ce
+     * contrat. Il n'existe pas d'étape intermédiaire à intercepter.
      */
-    function _seed(address pool, address token)
-        private
-        returns (Range memory r)
-    {
-        bool tokenIsToken0 = IUniswapV3Pool(pool).token0() == token;
-        r = tokenIsToken0 ? rangeIfToken0 : rangeIfToken1;
+    function _seed(address token, bool tokenIsToken0) private returns (address pool) {
+        (int24 lower, int24 upper) = ticksFor(tokenIsToken0);
 
-        uint128 liquidity;
-        if (tokenIsToken0) {
-            // Prix = quote par token : la plage est au-dessus du départ, et
-            // acheter fait monter le tick.
-            IUniswapV3Pool(pool).initialize(r.sqrtLower);
-            uint256 mid = Math.mulDiv(r.sqrtLower, r.sqrtUpper, Q96);
-            liquidity = uint128(Math.mulDiv(supply, mid, r.sqrtUpper - r.sqrtLower));
-        } else {
-            // Prix = tokens par quote : tout s'inverse, acheter fait baisser
-            // le tick, et le départ est le bord haut.
-            IUniswapV3Pool(pool).initialize(r.sqrtUpper);
-            liquidity = uint128(Math.mulDiv(supply, Q96, r.sqrtUpper - r.sqrtLower));
-        }
+        pool = _openPool(token, tokenIsToken0);
+        (uint256 tokenId, uint128 liquidity) =
+            _mintToLocker(token, tokenIsToken0, lower, upper);
 
-        minting = pool;
-        (uint256 used0, uint256 used1) = IUniswapV3Pool(pool).mint(
-            address(fees), r.tickLower, r.tickUpper, liquidity, abi.encode(token)
+        launches[token] = Launch({
+            pool: pool,
+            tokenId: tokenId,
+            liquidity: liquidity,
+            tickLower: lower,
+            tickUpper: upper,
+            creator: msg.sender,
+            launchedAt: uint64(block.timestamp)
+        });
+
+        locker.register(
+            token, pool, tokenId, lower, upper, liquidity, msg.sender, !tokenIsToken0
         );
-        minting = address(0);
-
-        // Un côté doit être nul : sinon la position n'est pas unilatérale et
-        // le launcher devrait de la quote qu'il n'a pas.
-        if (used0 + used1 == 0) revert NothingMinted();
     }
 
-    /// Le pool réclame ce qu'il vient de créditer. Seul le pool en cours de
-    /// `mint` peut appeler, et il n'est jamais dû autre chose que le token.
-    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata data)
-        external
-        override
-    {
-        if (msg.sender != minting || minting == address(0)) revert UnexpectedCallback();
+    function _openPool(address token, bool tokenIsToken0) private returns (address pool) {
+        int24 startTick = initialTick(tokenIsToken0);
+        (address token0, address token1) = tokenIsToken0 ? (token, quote) : (quote, token);
 
-        address token = abi.decode(data, (address));
-        uint256 owed = amount0Owed + amount1Owed;
-        // Avant `initialize` du token, les transferts sont libres : c'est la
-        // seule fenêtre où la supply peut rejoindre le pool.
-        RevealToken(token).transfer(msg.sender, owed);
+        pool = positionManager.createAndInitializePoolIfNecessary(
+            token0, token1, FEE, TickMath.getSqrtRatioAtTick(startTick)
+        );
+
+        // Le pool vient d'être créé par nous : s'il n'ouvre pas au tick attendu,
+        // quelque chose l'a devancé et le prix de départ n'est pas le nôtre.
+        (, int24 openedAt,,,,,) = IUniswapV3Pool(pool).slot0();
+        if (openedAt != startTick) revert WrongInitialTick(startTick, openedAt);
+    }
+
+    function _mintToLocker(address token, bool tokenIsToken0, int24 lower, int24 upper)
+        private
+        returns (uint256 tokenId, uint128 liquidity)
+    {
+        (address token0, address token1) = tokenIsToken0 ? (token, quote) : (quote, token);
+
+        RevealToken(token).approve(address(positionManager), supply);
+
+        uint256 used0;
+        uint256 used1;
+        (tokenId, liquidity, used0, used1) = positionManager.mint(
+            INonfungiblePositionManager.MintParams({
+                token0: token0,
+                token1: token1,
+                fee: FEE,
+                tickLower: lower,
+                tickUpper: upper,
+                amount0Desired: tokenIsToken0 ? supply : 0,
+                amount1Desired: tokenIsToken0 ? 0 : supply,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(locker),
+                deadline: block.timestamp
+            })
+        );
+
+        // Toute approbation résiduelle est une surface d'attaque gratuite.
+        RevealToken(token).approve(address(positionManager), 0);
+
+        _assertSeeded(tokenIsToken0, liquidity, used0, used1);
+    }
+
+    /// Ce que le lancement doit avoir produit, vérifié plutôt que supposé.
+    function _assertSeeded(
+        bool tokenIsToken0,
+        uint128 liquidity,
+        uint256 used0,
+        uint256 used1
+    ) private view {
+        (uint256 usedToken, uint256 usedQuote) =
+            tokenIsToken0 ? (used0, used1) : (used1, used0);
+
+        // Aucune quote ne doit être dépensée : sinon la position n'est pas
+        // unilatérale et le launcher devrait un actif qu'il ne détient pas.
+        if (usedQuote != 0) revert QuoteWasSpent(usedQuote);
+
+        // La supply doit être passée presque entièrement — le reste est la
+        // poussière d'arrondi entier, de l'ordre de quelques milliers de wei.
+        if (usedToken > supply || supply - usedToken > supply / 1e9) {
+            revert SupplyNotDeposited(supply, usedToken);
+        }
+
+        uint128 expected = expectedLiquidity(tokenIsToken0);
+        if (liquidity != expected) revert LiquidityMismatch(expected, liquidity);
     }
 }

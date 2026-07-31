@@ -3,18 +3,22 @@ pragma solidity ^0.8.24;
 
 /**
  * Paramètres d'un lancement. Choisis à la création, jamais modifiables ensuite :
- * c'est la promesse centrale du protocole, donc ils sont `immutable` côté token
- * et validés une seule fois, ici.
+ * c'est la promesse centrale du protocole, donc ils sont validés une seule fois,
+ * ici, et le launcher n'expose aucune fonction pour les changer.
+ *
+ * Il y a eu un cinquième et un sixième champ : `impactCapBps` et
+ * `impactWindow`, qui plafonnaient chaque vente à une fraction de la réserve de
+ * quote. Ils ont été retirés — pas allégés, retirés — parce que la référence
+ * qu'ils mesuraient ne pouvait pas être lue honnêtement depuis un hook ERC-20.
+ * Voir `RevealToken` pour le détail. Ce qui reste, le déblocage progressif de
+ * chaque position, suffit à tenir la thèse : la vente est métrée, jamais
+ * interdite.
  */
 struct Rules {
     /// Part vendable dès le premier bloc, en points de base (1000 = 10 %).
     uint16 initialUnlockBps;
-    /// Durée, en secondes, jusqu'au déblocage complet d'une position.
+    /// Durée, en secondes, jusqu'au déblocage complet d'une acquisition.
     uint32 unlockSeconds;
-    /// Plafond de vente par fenêtre, en bps de la réserve du pool.
-    uint16 impactCapBps;
-    /// Longueur de la fenêtre du plafond, en secondes.
-    uint32 impactWindow;
     /// Délai avant le premier achat, en secondes.
     uint32 launchDelay;
     /// Durée de la montée en taille d'achat, en secondes.
@@ -34,36 +38,35 @@ library RevealRules {
      */
     uint256 internal constant HALVING_TICKS = 6_932;
 
-    /// Taille d'achat autorisée au tout début de la rampe, en bps des réserves.
+    /// Taille d'achat autorisée au tout début de la rampe, en bps de la supply.
     uint256 internal constant RAMP_START_BPS = 25;
+
+    /**
+     * Plafond du déblocage initial. Au-delà, la mécanique serait inerte — et
+     * c'est aussi ce qui garantit que `BPS - initialUnlockBps` ne s'annule
+     * jamais, dénominateur dont dépend tout le calcul de la part verrouillée.
+     */
+    uint16 internal constant MAX_INITIAL_UNLOCK_BPS = 5_000;
 
     error InitialUnlockTooHigh();
     error UnlockWindowOutOfRange();
-    error ImpactCapOutOfRange();
-    error ImpactWindowOutOfRange();
     error LaunchDelayTooLong();
     error BuyRampTooLong();
 
     function validate(Rules memory r) internal pure {
-        // Un déblocage initial de 100 % rendrait toute la mécanique inerte.
-        if (r.initialUnlockBps > 5_000) revert InitialUnlockTooHigh();
+        if (r.initialUnlockBps > MAX_INITIAL_UNLOCK_BPS) revert InitialUnlockTooHigh();
         // Bornes hautes : au-delà, le token serait durablement invendable.
         if (r.unlockSeconds < 1 hours || r.unlockSeconds > 7 days) {
             revert UnlockWindowOutOfRange();
-        }
-        // Un plafond nul bloquerait toute vente ; au-delà de 10 % il ne freine rien.
-        if (r.impactCapBps == 0 || r.impactCapBps > 1_000) revert ImpactCapOutOfRange();
-        if (r.impactWindow < 1 minutes || r.impactWindow > 1 hours) {
-            revert ImpactWindowOutOfRange();
         }
         if (r.launchDelay > 1 hours) revert LaunchDelayTooLong();
         if (r.buyRamp > 1 days) revert BuyRampTooLong();
     }
 
     /**
-     * Part débloquée par le seul écoulement du temps, depuis l'entrée en
-     * position. Linéaire : la moitié du temps donne la moitié du chemin entre
-     * le déblocage initial et 100 %.
+     * Part débloquée par le seul écoulement du temps, depuis l'acquisition.
+     * Linéaire : la moitié du temps donne la moitié du chemin entre le
+     * déblocage initial et 100 %.
      */
     function timeUnlockedBps(Rules memory r, uint256 heldFor) internal pure returns (uint256) {
         if (heldFor >= r.unlockSeconds) return BPS;
@@ -85,26 +88,12 @@ library RevealRules {
     }
 
     /**
-     * Taille maximale d'un achat pendant la rampe anti-sniper, en bps des
-     * réserves. Part très bas et rejoint « aucune limite » à la fin.
+     * Taille maximale d'un achat pendant la rampe anti-sniper, en bps de la
+     * supply. Part très bas et rejoint « aucune limite » à la fin.
      */
     function rampBps(Rules memory r, uint256 sinceLaunch) internal pure returns (uint256) {
         if (r.buyRamp == 0 || sinceLaunch >= r.buyRamp) return BPS;
         uint256 span = BPS - RAMP_START_BPS;
         return RAMP_START_BPS + (span * sinceLaunch) / r.buyRamp;
-    }
-
-    /**
-     * Seau percé : la quantité déjà vendue s'efface linéairement sur la durée
-     * de la fenêtre. Évite l'effet de bord des fenêtres fixes, où l'on peut
-     * vendre deux plafonds d'affilée en enjambant une frontière.
-     */
-    function decayed(uint256 sold, uint256 elapsed, uint32 window)
-        internal
-        pure
-        returns (uint256)
-    {
-        if (elapsed >= window) return 0;
-        return (sold * (window - elapsed)) / window;
     }
 }

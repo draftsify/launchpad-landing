@@ -42,7 +42,7 @@ export const DOC_NAV: DocGroup[] = [
     items: [
       { id: "unlock", label: "Unlock schedule", icon: Timer },
       { id: "relief", label: "Drawdown relief", icon: CircleDot },
-      { id: "impact", label: "Impact caps", icon: SlidersHorizontal },
+      { id: "graduation", label: "Graduation", icon: SlidersHorizontal },
       { id: "antisniper", label: "Anti-sniper", icon: ShieldCheck },
     ],
   },
@@ -114,26 +114,42 @@ export const RELIEF_PARAMS: Param[] = [
     bound: "constant",
     value: "300",
     description:
-      "Window the drawdown is measured over. Relief reads the TWAP, never spot: spot would let anyone crash the price for one block to unlock their own position.",
+      "Window the current price is averaged over, and the delay before a position earns any relief at all. Relief reads the TWAP for 'now', never spot — spot would let anyone crash the price for one block to unlock themselves. The entry price is the spot the buyer actually paid, so the two ends are only comparable once a full window has passed since the buy; before that, relief is zero.",
+  },
+  {
+    name: "entry price",
+    type: "int24",
+    bound: "spot at buy",
+    value: "—",
+    description:
+      "The marginal price at the end of the buyer's own swap. It is above their average execution price, so a very large buy earns its relief on a slightly smaller real loss than advertised. The quote amount is not readable from an ERC-20 hook, so the average cannot be computed on chain — stated rather than hidden.",
   },
 ];
 
-export const IMPACT_PARAMS: Param[] = [
+export const GRADUATION_PARAMS: Param[] = [
   {
-    name: "impactCapBps",
-    type: "uint16",
-    bound: "1 – 1000",
-    value: "1000",
+    name: "GRADUATION_QUOTE",
+    type: "uint256",
+    bound: "constant",
+    value: "4.2 ETH",
     description:
-      "Most one position may sell per window, as a share of the pool's quote reserve — the side that actually absorbs the impact. Measured against tokens it would mean nothing: at launch the pool holds the entire supply.",
+      "Quote held by the locked position at which the launch is considered graduated. A status milestone and nothing else: same token, same pool, same fee tier, same ticks, same liquidity, same permissions. Nothing migrates, and graduation guarantees no exit.",
   },
   {
-    name: "impactWindow",
-    type: "uint32",
-    bound: "60 – 3600",
-    value: "300",
+    name: "graduationProgress(token)",
+    type: "uint256",
+    bound: "view",
+    value: "—",
     description:
-      "Length of the rolling window. A leaky bucket, not a reset: what was sold fades linearly, so a refused remainder becomes available gradually instead of all at once on a boundary.",
+      "Quote the protocol's own position actually contains at the current price, derived from its ticks and liquidity. Deliberately not WETH.balanceOf(pool): that balance counts direct donations and unrelated positions, so anyone could trigger graduation by sending ETH. A donation does not move the price, so it does not move this.",
+  },
+  {
+    name: "syncGraduation(token)",
+    type: "—",
+    bound: "permissionless",
+    value: "—",
+    description:
+      "Records the crossing and emits Graduated once. Anyone may call it; it changes a flag and nothing else. Until it is called, graduated(token) stays false even if progress is above the threshold.",
   },
 ];
 
@@ -169,21 +185,36 @@ export type EventDef = { signature: string; description: string };
 export const EVENTS: EventDef[] = [
   {
     signature:
-      "Launched(address token, address creator, address pool, uint256 supply, int24 tickLower, int24 tickUpper, Rules rules)",
+      "Launched(address token, address creator, address pool, uint256 tokenId, uint256 supply, uint128 liquidity, int24 tickLower, int24 tickUpper, Rules rules)",
     description:
-      "Emitted once per launch, by the launcher. Name, symbol and metadataURI are not repeated here — they are read from the token, which keeps the event off the compiler's stack limit.",
+      "Emitted once per launch, by the launcher. tokenId is the Uniswap V3 position NFT, minted straight to the locker. Name, symbol and metadataURI are not repeated here — they are read from the token, which keeps the event off the compiler's stack limit.",
   },
   {
-    signature:
-      "Entry(address holder, uint256 amount, uint64 entryTime, int24 basisTick)",
+    signature: "Entry(address holder, uint256 amount, uint64 lockStart, int24 lockTick)",
     description:
-      "A position received tokens — a buy or an incoming transfer. Carries the position's state after re-weighting, so an indexer never has to average anything itself.",
+      "A position acquired tokens from the pool. Carries the merged tranche's state, so an indexer never has to recompute it. A plain incoming transfer emits nothing here: what left the sender was already unlocked, so it arrives unlocked.",
   },
   {
     signature:
       "Exit(address holder, uint256 amount, uint256 unlockedBps, bool viaPool)",
     description:
       "A position let tokens out, and how open it was at that moment. viaPool separates a sell from a plain transfer — both consume the same unlock budget.",
+  },
+  {
+    signature:
+      "Registered(address token, address pool, uint256 tokenId, int24 tickLower, int24 tickUpper, uint128 liquidity)",
+    description:
+      "The locker took permanent ownership of the position. Emitted once per launch, by the locker.",
+  },
+  {
+    signature: "Collected(address token, uint256 amount0, uint256 amount1)",
+    description:
+      "Swap fees were materialised and sent to the treasury. Anyone may trigger it, the destination is immutable, and the position's liquidity is unchanged by construction.",
+  },
+  {
+    signature: "Graduated(address token, address pool, uint256 quoteAmount)",
+    description:
+      "The locked position crossed GRADUATION_QUOTE and someone recorded it. Emitted at most once per token. Nothing moved.",
   },
 ];
 
@@ -205,13 +236,23 @@ export const ERRORS: ErrorDef[] = [
       "The position may not release this much yet. Returns the amount that would succeed — offer that rather than a bare failure.",
   },
   {
-    name: "ImpactCapExceeded(uint256 remaining)",
+    name: "StringTooLong()",
     description:
-      "The position has used its share of the current window. Returns what is left in it.",
+      "Name, symbol or metadataURI is empty or past its bound — 64, 16 and 4096 bytes. Without a bound, a launch could cost arbitrary gas and the token would be unreadable to any indexer.",
   },
   {
     name: "OnlyLauncher() · AlreadyInitialized()",
     description:
       "Arming the rules is callable once, by the launcher that deployed the token. There is no second path into that state.",
+  },
+  {
+    name: "NotGraduatedYet(uint256 progress) · AlreadyGraduated()",
+    description:
+      "syncGraduation was called below the threshold, or a second time. Returns the progress it measured so the caller can see how far off it is.",
+  },
+  {
+    name: "QuoteWasSpent(uint256) · SupplyNotDeposited(uint256,uint256) · LiquidityMismatch(uint128,uint128) · WrongInitialTick(int24,int24)",
+    description:
+      "A launch did not produce exactly what it must: quote was consumed, the supply did not land, the minted liquidity differs from the derived value, or the pool did not open at the intended tick. Each aborts the whole launch rather than leaving a pool with the wrong curve.",
   },
 ];

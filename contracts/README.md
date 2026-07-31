@@ -25,12 +25,18 @@ real reason this runs on V3, not any security argument.
 
 ## Fees
 
-The position is owned by `RevealFees`, which exposes exactly one gesture:
-`burn(lower, upper, 0)`. The zero is hardcoded and never a parameter — in V3 a
-zero burn realises accrued fees without touching liquidity, and only a non-zero
-amount would withdraw it. No path through this contract can produce one, so the
-liquidity is as locked as it would be under a dead address while the fees stay
-reachable.
+The Uniswap V3 position NFT is minted straight to `RevealLocker` and belongs
+to no one else at any point — not the creator, not the deployer, not the
+treasury, not an EOA. There is no intermediate step to intercept.
+
+The guarantee is absence, not access control. The interface the locker holds,
+`INonfungiblePositionManager`, does not declare `decreaseLiquidity`, `burn`,
+`approve`, `setApprovalForAll` or `transferFrom`, so the contract cannot call
+them even by mistake. It has no fallback, no arbitrary call, no `delegatecall`,
+no rescue function, no owner and no upgrade path. `collect` goes through the
+position manager, which realises accrued fees without touching principal, and
+always pays the `treasury` fixed at deployment — anyone may trigger it, nobody
+can redirect it, and the contract never holds the funds.
 
 Minting the position to `0xdEaD` locks the liquidity but buries the fees with
 it. That was the previous behaviour and it meant the protocol earned nothing.
@@ -66,49 +72,77 @@ halving, and a halving releases the position entirely. Measured in ticks
 because V3's oracle returns a tick, and 1.0001^n is not something to compute
 on-chain.
 
-The budget is `basisAmount` (everything the position ever received) minus
-`releasedTotal`, never the current balance — against the balance, selling 10%
-reopens 10% of the remainder and a position drains in a few transactions.
-Plain transfers consume the same budget, so splitting across addresses does not
-walk through the gate.
+What is free is a subtraction, not a ledger: `balanceOf - lockedOf`. A buy
+adds the locked share of the new purchase to whatever is *still* locked and
+restarts the clock on the sum, which makes the guarantee exact — after any buy,
+`releasable` is what it was plus `amount × initialUnlockBps / 10_000`,
+whatever the holder's history.
 
-**3. Impact cap** — on sells into the pool. `impactCapBps` of the quote reserve
-per `impactWindow`, as a leaky bucket that decays rather than resetting on a
-boundary. Denominated in quote, not tokens: on the token side it would equal
-the entire supply at launch. Consequence, intended: nothing is sellable until
-someone has bought.
+An earlier version kept a running `releasedTotal` and compared it to a
+recomputed budget. That debt outlived the position: exit almost entirely, leave
+a wei of dust, buy again, and the old debt was charged against the new purchase
+— which then started with nothing releasable. There is now no debt to outlive
+anything.
+
+Plain transfers consume the same budget, so splitting across addresses does not
+walk through the gate. What leaves was therefore already unlocked, and the
+recipient is never re-locked.
+
+There was a third gate, an impact cap denominated in the pool's quote reserve.
+It is gone. See below.
 
 ## Two asymmetries that are load-bearing
 
-**Entry price is spot; current price is TWAP.** The TWAP lags by minutes, so
-using it for entry would credit a buyer during a fast run-up with a price far
-below what they paid — they would look permanently in profit and never earn the
-relief their real loss deserves. Spot is safe for entry: V3 updates `slot0`
-before calling us, so it is the marginal price just paid, and inflating it to
-manufacture future relief means buying at that inflated price. The current
-price must stay a TWAP, because that is the side where manipulation pays.
+**Entry price is spot; current price is TWAP — and relief waits a full
+window.** The TWAP lags by minutes, so using it for entry would credit a buyer
+during a fast run-up with a price far below what they paid: they would look
+permanently in profit and never earn the relief their real loss deserves. Spot
+is safe for entry — V3 updates `slot0` before calling us, so it is the marginal
+price just paid. The current price must stay a TWAP, because that is the side
+where manipulation pays.
 
-**The impact cap reads a mark taken on buys, never live during a sell.** V3
-sends the swap output *before* invoking the callback where our hook runs, so a
-live read is already short by the proceeds of the very sell being checked, and
-the view would promise more than the transaction accepts.
+The two are only comparable once `TWAP_PERIOD` has elapsed since the buy, and
+that delay is load-bearing rather than cosmetic. Without it, a buy large enough
+to move the tick by more than 6,932 steps — a doubling, unremarkable on a
+one-sided pool that has just opened — declared itself down 50% in the very
+block it executed, took 100% relief and left the unlock schedule entirely.
+Measured: 10,967 ticks of fabricated loss for a single one-ether buy. After a
+full window the average contains no pre-buy price, so a flat market gives
+exactly zero drawdown while a real fall still registers.
+
+**Nothing claims an exact share of the quote reserve.** V3 sends the swap
+output *before* invoking the callback where our hook runs: on a sell the
+reserve is already short by the proceeds of the very sell being checked, and on
+a buy the incoming quote has not arrived and had to be estimated at the
+marginal price — while the buy was paid at the trip's average. At the edge of a
+one-sided position the gap approaches a factor of two: a cap advertised at 10%
+let through 17.3% of the real reserve. An honest figure is not derivable from
+an ERC-20 hook, so none is advertised and the cap was removed rather than
+relabelled.
 
 ## Known limitations
 
 - **Revert reasons do not survive the pool.** Uniswap wraps token transfers, so
-  any failure surfaces as `TF`. The frontend must call `sellableNow()` /
-  `releasable()` / `windowRemaining()` before sending a transaction rather than
-  parsing a failure. The incumbent launchpad on this chain removed its trading
+  any failure surfaces as `TF`. The frontend must call `releasable()` and
+  `maxBuyNow()` before sending a transaction rather than parsing a failure. The incumbent launchpad on this chain removed its trading
   restrictions in V2 for exactly this reason — third-party apps were seeing
   unexplained failed transactions. Keeping the restrictions is a deliberate
   product choice made with that precedent in view.
-- **The impact cap is per address.** A fully-unlocked holder can split across
-  wallets and get one bucket each. The unlock gate stops this for young
-  positions — a fresh wallet restarts at `initialUnlockBps` — but not for one
-  that waited out `unlockSeconds`.
+- **Fully unlocked means fully free, and that is deliberate.** Once a position
+  has passed `unlockSeconds` it is an ordinary ERC-20 balance: sellable,
+  transferable, splittable across wallets. Multiple buyers using multiple
+  wallets get independent positions, and preventing that would require identity.
+  Post-unlock secondary-pool trading is not an exploit and is not described as
+  one.
+- **Relief is not monotonic.** A crash can unlock a position that a recovery
+  then re-locks, so `releasable` can fall as well as rise. `lockedOf` is capped
+  at the balance so the accounting stays exact, and the time component still
+  reaches 100% at `unlockSeconds` regardless of what the price did.
 - **A second pool at another fee tier is not covered.** Sells routed there are
-  treated as plain transfers: still charged against the unlock budget, but
-  outside the impact cap.
+  treated as plain transfers — still charged against the position's unlock
+  budget, which is the guarantee that matters: an alternative pool cannot
+  release more inventory than the holder was allowed to move. Once a balance is
+  fully unlocked, trading it elsewhere is not an exploit.
 - **The TWAP needs trading history.** With too few swaps for the configured
   observation cardinality, `observe` reverts and no relief is granted — the
   conservative direction, but relief becomes unavailable rather than
@@ -119,7 +153,8 @@ the view would promise more than the transaction accepts.
 
 ```bash
 forge build
-forge test          # 13 tests
+forge test          # 79 tests, 5 of them stateful invariants
+forge test --no-match-contract RevealForkRobinhood   # no network needed
 ```
 
 Tests trade through a minimal router that pays by `transferFrom` from the
@@ -128,9 +163,20 @@ order.
 
 v3-core is Solidity 0.7.6 and cannot be imported from a 0.8 test, so
 `test/mocks/UniswapV3Artifacts.sol` forces its compilation and the tests
-instantiate it with `deployCode`. `TickMath` does not compile under 0.8 at all;
-`TickMathExposer` publishes the canonical version so the range constants are
-computed rather than transcribed by hand.
+instantiate it with `deployCode`.
+
+`TickMath` is vendored into `src/libraries` rather than queried off-chain, so
+the launcher derives its own starting price and anyone can recompute it from
+the tick alone. `TickMathParity` fuzzes the port against the canonical 0.7.6
+library across the whole tick range.
+
+The `NonfungiblePositionManager` is doubled locally. v3-periphery is pinned to
+0.7.6 and OpenZeppelin 3.4, and its `PoolAddress` hardcodes the init-code hash
+of Uniswap's *own* build of the pool — recompiled here, that hash differs and
+the manager looks for pools at addresses that do not exist. A local copy would
+give false confidence rather than coverage. `RevealForkRobinhood` therefore
+runs the whole lifecycle against the real manager on the real chain, and is
+what validates the double.
 
 ## Deploying
 

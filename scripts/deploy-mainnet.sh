@@ -18,7 +18,7 @@
 # jamais la machine.
 #
 # CE QUI EST IRRÉVERSIBLE : la trésorerie. Elle est inscrite dans le
-# constructeur de RevealFees, qui n'expose aucune fonction pour la changer. Une
+# constructeur de RevealLocker, qui n'expose aucune fonction pour la changer. Une
 # adresse fausse envoie tous les frais de swap, pour toujours, à un endroit dont
 # personne n'a la clé. Le launcher aussi est immuable : les règles déployées
 # s'appliquent à tous les tokens qui en sortiront.
@@ -38,9 +38,49 @@ EXPLORER=https://robinhoodchain.blockscout.com
 # possible mais doit être un geste délibéré — et exige d'avoir vérifié que la
 # clé de l'adresse n'a jamais été partagée, collée ni exportée.
 TREASURY="${TREASURY:-0xa40679bC2f4f5B51Edb05E7A2D573292A3479c62}"
-if [ -z "${ACCOUNT:-}" ]; then
-  echo "ACCOUNT manquant : nom du keystore, par exemple ACCOUNT=deployer." >&2
-  echo "  Le créer une fois : cast wallet import deployer --interactive" >&2
+
+# Deux façons de signer, et le portefeuille matériel est la meilleure : la clé
+# ne touche jamais la machine, elle reste dans l'appareil qui affiche la
+# transaction avant de la signer.
+#
+#   LEDGER=1 bash scripts/deploy-mainnet.sh
+#   ACCOUNT=deployer bash scripts/deploy-mainnet.sh
+#
+# À savoir avant de choisir : le déployeur ne reçoit aucun pouvoir. Les
+# contrats n'ont ni propriétaire, ni administrateur, ni pause, ni fonction pour
+# changer la trésorerie. Une fois le déploiement fait, cette adresse est une
+# adresse comme une autre. Un wallet jetable financé du strict nécessaire fait
+# donc parfaitement l'affaire, et c'est le choix recommandé si aucun appareil
+# matériel n'est disponible.
+if [ -n "${LEDGER:-}" ]; then
+  SIGNER=(--ledger)
+  SENDER=$(cast wallet address --ledger)
+elif [ -n "${TREZOR:-}" ]; then
+  SIGNER=(--trezor)
+  SENDER=$(cast wallet address --trezor)
+elif [ -n "${ACCOUNT:-}" ]; then
+  SIGNER=(--account "$ACCOUNT")
+  # Lire l'adresse du keystore exige de le déchiffrer, donc de saisir le mot de
+  # passe — une première fois ici, une seconde à la signature. Deux demandes
+  # identiques à quelques secondes d'intervalle se lisent comme un échec de la
+  # première, et c'est ce qui est arrivé. La fournir évite la demande, sans rien
+  # affaiblir : elle est vérifiée contre ce que le keystore contient vraiment,
+  # juste après, et une adresse fausse arrête tout.
+  SENDER="${SENDER:-$(cast wallet address --account "$ACCOUNT")}"
+  # Une invite qui n'affiche rien pendant la frappe se lit comme une invite qui
+  # ne répond pas. KEYSTORE_PASSWORD lève l'ambiguïté, au prix d'un mot de passe
+  # dans l'historique du shell — acceptable seulement parce que ce keystore ne
+  # protège rien : le déployeur ne reçoit aucun pouvoir, et sa clé existe déjà
+  # ailleurs. Ne pas transposer ce raccourci à un keystore qui garde des fonds.
+  [ -n "${KEYSTORE_PASSWORD:-}" ] && SIGNER+=(--password "$KEYSTORE_PASSWORD")
+else
+  echo "Aucune méthode de signature. Choisissez-en une :" >&2
+  echo "  LEDGER=1 bash scripts/deploy-mainnet.sh      # rien sur le disque" >&2
+  echo "  TREZOR=1 bash scripts/deploy-mainnet.sh" >&2
+  echo "  ACCOUNT=deployer bash scripts/deploy-mainnet.sh" >&2
+  echo >&2
+  echo "Le keystore se crée une fois, en tapant la clé soi-même :" >&2
+  echo "  cast wallet import deployer --interactive" >&2
   exit 1
 fi
 
@@ -54,14 +94,14 @@ if ! [[ "$TREASURY" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
   exit 1
 fi
 
-SENDER=$(cast wallet address --account "$ACCOUNT")
 BALANCE=$(cast balance "$SENDER" --rpc-url $RPC)
 GAS_PRICE=$(cast gas-price --rpc-url $RPC)
 
-# Mesuré sur un fork de cette même chaîne : 5 888 635 pour le déploiement,
-# 9 705 636 pour un premier lancement. La marge de trois couvre une variation
-# du prix du gas entre l'estimation et l'inclusion.
-NEEDED=$(node -e "process.stdout.write(((5888635n+9705636n)*${GAS_PRICE}n*3n).toString())")
+# Mesuré en simulant ce script contre la chaîne elle-même : 8 061 917 pour le
+# déploiement, 18 125 985 pour un premier lancement avec une image inscrite sur
+# la chaîne. La marge de trois couvre une variation du prix du gas entre
+# l'estimation et l'inclusion.
+NEEDED=$(node -e "process.stdout.write(((8061917n+18125985n)*${GAS_PRICE}n*3n).toString())")
 
 printf '\n\033[1mCe qui va être déployé\033[0m\n'
 echo "  chaîne     : Robinhood Chain (4663)"
@@ -74,7 +114,10 @@ echo "  ^ immuable. Vérifiez-la caractère par caractère avant de continuer."
 echo
 echo "  frais      : 100 % à la trésorerie, aucune part créateur"
 echo "  règles     : 10 % vendable au lancement, tout ouvert en 1 h,"
-echo "               plafond 10 % du pool par 5 min, délai anti-sniper 5 s"
+echo "               délai anti-sniper 5 s, rampe d'achat 10 min"
+echo "  courbe     : ticks -204200/887200, liquidité 36819258015569838458222"
+echo "               — la configuration du launchpad de référence, au tick près"
+echo "  graduation : 4.2 ETH, statut seulement — rien ne migre"
 
 if [ "$(node -e "process.stdout.write(BigInt('$BALANCE')<BigInt('$NEEDED')?'1':'0')")" = "1" ]; then
   echo
@@ -88,20 +131,27 @@ read -r -p "Taper exactement DEPLOY pour continuer : " CONFIRM
 
 printf '\n\033[1mDéploiement\033[0m\n'
 TREASURY="$TREASURY" forge script script/Deploy.s.sol:Deploy \
-  --rpc-url $RPC --account "$ACCOUNT" --sender "$SENDER" --broadcast
+  --rpc-url $RPC "${SIGNER[@]}" --sender "$SENDER" --broadcast
 
 LAUNCHER=$(node -e "
   const r = require('./broadcast/Deploy.s.sol/4663/run-latest.json');
   const t = r.transactions.find(t => t.contractName === 'RevealLauncher');
   process.stdout.write(t.contractAddress);
 ")
-FEES=$(cast call "$LAUNCHER" 'fees()(address)' --rpc-url $RPC)
+LOCKER=$(cast call "$LAUNCHER" 'locker()(address)' --rpc-url $RPC)
 
+# Relu sur la chaîne, jamais depuis ce script : ce qui compte est ce que le
+# contrat dit de lui-même une fois déployé.
 printf '\n\033[1mVérification sur la chaîne\033[0m\n'
 echo "  RevealLauncher : $LAUNCHER"
-echo "  RevealFees     : $FEES"
-echo "  trésorerie lue : $(cast call "$FEES" 'treasury()(address)' --rpc-url $RPC)"
-echo "  règles lues    : $(cast call "$LAUNCHER" 'rules()(uint16,uint32,uint16,uint32,uint32,uint32)' --rpc-url $RPC | tr '\n' ' ')"
+echo "  RevealLocker   : $LOCKER"
+echo "  trésorerie lue : $(cast call "$LOCKER" 'treasury()(address)' --rpc-url $RPC)"
+echo "  règles lues    : $(cast call "$LAUNCHER" 'rules()(uint16,uint32,uint32,uint32)' --rpc-url $RPC | tr '\n' ' ')"
+echo "  liquidité t0   : $(cast call "$LAUNCHER" 'expectedLiquidity(bool)(uint128)' true --rpc-url $RPC)"
+echo "  liquidité t1   : $(cast call "$LAUNCHER" 'expectedLiquidity(bool)(uint128)' false --rpc-url $RPC)"
+echo "  ^ doit valoir 36819258015569838458222 dans les deux cas"
+echo "  seuil gradu.   : $(cast call "$LOCKER" 'GRADUATION_QUOTE()(uint256)' --rpc-url $RPC)"
+echo "  manifeste      : contracts/deployments/4663.json"
 echo "  explorateur    : $EXPLORER/address/$LAUNCHER"
 
 printf '\n\033[1mIl reste à faire\033[0m\n'
@@ -113,12 +163,28 @@ cat <<NEXT
          --chain-id 4663 --verifier blockscout \\
          --verifier-url $EXPLORER/api
 
+       forge verify-contract $LOCKER src/RevealLocker.sol:RevealLocker \\
+         --chain-id 4663 --verifier blockscout \\
+         --verifier-url $EXPLORER/api
+
   2. Pointer le site dessus, dans les variables d'environnement Vercel :
 
        vercel env add NEXT_PUBLIC_LAUNCHER production --scope draftsifys-projects
        # valeur : $LAUNCHER
        vercel deploy --prod --yes --scope draftsifys-projects
 
-  3. Lancer un token de test avec un petit montant, et vérifier qu'un achat
+  3. Committer contracts/deployments/4663.json : il porte les paramètres du
+     constructeur et l'empreinte du code réellement en place, donc il rend le
+     déploiement contestable par un tiers.
+
+  4. Lancer un token de test avec un petit montant, et vérifier qu'un achat
      puis une vente passent, avant d'annoncer quoi que ce soit.
+
+  5. Seulement ensuite, ouvrir les lancements au public :
+
+       vercel env add NEXT_PUBLIC_LAUNCHES_OPEN production --scope draftsifys-projects
+       # valeur : true
+
+     C'est un interrupteur séparé du précédent, et volontairement : déployer
+     n'ouvre pas le site, ce qui laisse le temps de tout vérifier soi-même.
 NEXT

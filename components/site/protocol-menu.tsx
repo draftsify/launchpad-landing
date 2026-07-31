@@ -11,7 +11,7 @@ const ITEMS = [
   {
     label: "How it works",
     href: "/how-it-works",
-    description: "Unlock curves, impact caps, anti-sniper.",
+    description: "Unlock curves, drawdown relief, anti-sniper.",
     icon: Route,
   },
   {

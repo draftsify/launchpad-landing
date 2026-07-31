@@ -31,14 +31,13 @@ const DRAWDOWN = [
   { id: "40", label: "−40%", floor: 95 },
 ];
 
-const SIZE = [
-  { id: "1", label: "1%", share: 1 },
-  { id: "4", label: "4%", share: 4 },
-  { id: "10", label: "10%", share: 10 },
-];
-
-/** Plafond d'impact par fenêtre, en part de la liquidité du pool. */
-const CAP = 1;
+/**
+ * Il y avait ici une troisième dimension — la taille de la position rapportée
+ * au pool — parce qu'un plafond d'impact s'y mesurait. Ce plafond a été retiré
+ * du protocole : la réserve qu'il prétendait mesurer n'est pas lisible depuis
+ * un hook ERC-20, et celui annoncé à 10 % en laissait passer 17,3 %. Le
+ * simulateur n'a plus que ce qui existe vraiment — le temps, et la perte.
+ */
 
 function Control({
   label,
@@ -104,22 +103,17 @@ function Key({
 export function Mechanics() {
   const [time, setTime] = useState("6h");
   const [drawdown, setDrawdown] = useState("0");
-  const [size, setSize] = useState("4");
   const reduce = useReducedMotion();
 
   const t = TIME.find((o) => o.id === time) ?? TIME[1];
   const d = DRAWDOWN.find((o) => o.id === drawdown) ?? DRAWDOWN[0];
-  const s = SIZE.find((o) => o.id === size) ?? SIZE[1];
 
   // La protection en perte est un plancher, jamais un bonus qui s'ajoute.
   const unlocked = Math.max(t.unlocked, d.floor);
 
-  // Le plafond se mesure en part du pool : une grosse position atteint donc
-  // la limite alors qu'une petite passe entièrement.
-  const unlockedOfPool = (unlocked / 100) * s.share;
-  const executableOfPool = Math.min(unlockedOfPool, CAP);
-  const executable = Math.round((executableOfPool / s.share) * 100);
-  const waiting = unlocked - executable;
+  // Plus rien ne s'interpose entre ce qui est débloqué et ce qui part : une
+  // fois libérée, la quantité est un solde ERC-20 ordinaire.
+  const executable = unlocked;
   const vesting = 100 - unlocked;
 
   const transition = reduce ? { duration: 0 } : { duration: 0.5, ease: EASE };
@@ -145,7 +139,7 @@ export function Mechanics() {
             <p className="hidden text-right font-mono text-[11px] text-muted-foreground sm:block">
               time {t.unlocked}% · relief {d.floor}%
               <br />
-              unlocked {unlocked}% · cap {CAP}% of pool
+              unlocked {unlocked}% of the position
             </p>
           </div>
 
@@ -159,12 +153,6 @@ export function Mechanics() {
                 transition={transition}
               />
               <motion.div
-                className="rounded-lg border border-dashed border-foreground/25 bg-foreground/[0.07]"
-                initial={false}
-                animate={{ width: `${waiting}%` }}
-                transition={transition}
-              />
-              <motion.div
                 className="rounded-lg bg-foreground/[0.08]"
                 initial={false}
                 animate={{ width: `${vesting}%` }}
@@ -172,16 +160,11 @@ export function Mechanics() {
               />
             </div>
 
-            <div className="mt-3 grid gap-1.5 sm:grid-cols-3 sm:gap-x-5">
+            <div className="mt-3 grid gap-1.5 sm:grid-cols-2 sm:gap-x-5">
               <Key
                 swatch="bg-foreground/75"
-                label="Executes now"
+                label="Sellable now"
                 value={`${executable}%`}
-              />
-              <Key
-                swatch="border border-dashed border-foreground/25 bg-foreground/[0.07]"
-                label="Next window"
-                value={`${waiting}%`}
               />
               {/* La pastille reprend exactement la classe de sa zone : une
                   légende qui ne correspond pas à la marque ne sert à rien. */}
@@ -207,15 +190,9 @@ export function Mechanics() {
             value={drawdown}
             onChange={setDrawdown}
           />
-          <Control
-            label="Position size vs pool"
-            options={SIZE}
-            value={size}
-            onChange={setSize}
-          />
           <p className="pt-1 text-xs text-muted-foreground">
-            Hover or focus a value to recompute. A larger position hits the
-            impact cap that a small one never reaches.
+            Hover or focus a value to recompute. Drawdown is a floor, never a
+            bonus: a position in profit is never penalised for it.
           </p>
         </div>
       </div>

@@ -26,7 +26,12 @@ import {
   LAUNCHER_ADDRESS,
 } from "@/lib/chain";
 import { launchCall, tokenFromReceipt, waitForLaunch } from "@/lib/launcher";
-import { byteLength, shrinkImage, toDataUri } from "@/lib/metadata";
+import {
+  byteLength,
+  MAX_METADATA_BYTES,
+  shrinkImage,
+  toDataUri,
+} from "@/lib/metadata";
 import { useWallet } from "@/components/site/wallet-provider";
 import { formatDuration } from "@/lib/presets";
 import { cn } from "@/lib/utils";
@@ -192,6 +197,17 @@ export function CreateForm() {
         telegram,
         discord,
       });
+
+      // Le contrat borne les métadonnées, et refuserait après la signature —
+      // donc après que l'utilisateur a cru lancer. On le lui dit avant.
+      if (byteLength(metadataURI) > MAX_METADATA_BYTES) {
+        setStatus({
+          kind: "error",
+          message:
+            "Metadata too large for on-chain storage. Shorten the description, or use a simpler image.",
+        });
+        return;
+      }
 
       const { encodeFunctionData } = await import("viem");
       const call = launchCall(name.trim(), ticker.trim(), metadataURI);
@@ -449,10 +465,7 @@ export function CreateForm() {
             {[
               ["Sellable at launch", `${rules.initialUnlock}%`],
               ["Fully unlocked after", formatDuration(rules.unlockHours)],
-              [
-                "Impact cap",
-                `${rules.impactCap}% / ${rules.impactWindow} min`,
-              ],
+              ["Buy ramp", `${rules.buyRamp} min`],
               ["First buy opens", `${rules.launchDelay}s after deploy`],
             ].map(([label, value]) => (
               <div key={label} className="space-y-1">
@@ -594,8 +607,9 @@ export function CreateForm() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Reaches 100% after {formatDuration(rules.unlockHours)}. Capped at{" "}
-              {rules.impactCap}% of the pool&apos;s ETH per {rules.impactWindow} min.
+              Reaches 100% after {formatDuration(rules.unlockHours)}, sooner if
+              the position is underwater. Once unlocked, it is an ordinary
+              ERC-20 balance — no cap, no window.
             </p>
           </div>
 

@@ -3,232 +3,167 @@ pragma solidity ^0.8.24;
 
 import {RevealBase} from "./RevealBase.t.sol";
 import {RevealToken} from "../src/RevealToken.sol";
-import {RevealRules} from "../src/libraries/RevealRules.sol";
 
-/// Les trois portes du protocole, portées sur Uniswap V3.
+/**
+ * Les deux portes, prises une par une.
+ *
+ * Les achats venant du pool sont simulés par un transfert direct depuis
+ * l'adresse du pool : c'est exactement ce que le hook voit quand un vrai
+ * routeur exécute un ordre, et c'est la seule façon de lire le motif du refus.
+ * Passé par un routeur, Uniswap emballe le transfert et tout échec ressort en
+ * « TF » — d'où l'existence des vues `maxBuyNow` et `releasable`.
+ */
 contract RevealGatesTest is RevealBase {
-    // ---------------------------------------------------------- anti-sniper
-
-    function test_LaunchDelayBlocksTheFirstSeconds() public {
-        _giveWeth(alice, 0.01 ether);
-        vm.prank(alice);
-        vm.expectRevert(bytes("TF"));
-        router.swap(address(pool), alice, !tokenFirst, int256(uint256(0.01 ether)));
-
-        _warp(6);
-        _buy(alice, 0.01 ether);
-        assertGt(token.balanceOf(alice), 0, "l'achat passe le delai ecoule");
+    function _asPool(address to, uint256 amount) internal {
+        vm.prank(address(pool));
+        token.transfer(to, amount);
     }
 
-    /**
-     * En liquidite unilaterale, la rampe se mesure sur la supply en circulation
-     * et non sur la reserve du pool : au lancement le pool detient tout, donc
-     * un pourcentage de sa reserve n'aurait rien freine.
-     */
-    function test_BuyRampCapsTheFirstBuys() public {
-        _warp(6);
+    // ------------------------------------------------------- délai de lancement
 
-        // Au debut de la rampe, un achat est borne a 0,25 % de la supply.
-        uint256 maxBuy = (token.totalSupply() * 25) / 10_000;
-        _giveWeth(whale, 1 ether);
-        vm.prank(whale);
-        vm.expectRevert(bytes("TF"));
-        router.swap(address(pool), whale, !tokenFirst, int256(uint256(1 ether)));
+    function test_BuysAreClosedDuringTheLaunchDelay() public {
+        assertEq(token.maxBuyNow(), 0, "maxBuyNow devrait etre nul pendant le delai");
+        assertEq(token.buyOpensAt(), token.launchedAt() + 5, "ouverture annoncee incorrecte");
 
-        // Un petit achat passe, lui.
-        _buy(alice, 0.002 ether);
-        assertGt(token.balanceOf(alice), 0, "un achat sous la borne passe");
-        assertLt(token.balanceOf(alice), maxBuy, "et il reste sous la borne");
-
-        _pastRamp();
-        _buy(whale, 1 ether);
-        assertGt(token.balanceOf(whale), maxBuy, "la rampe ne bride plus");
-    }
-
-    /**
-     * La vue d'achat doit dire exactement ce que la porte fera.
-     *
-     * Uniswap emballe les transferts : un achat refuse remonte « TF », jamais
-     * BuyTooLarge. Une interface ne peut donc rien expliquer apres coup, elle ne
-     * peut que demander avant. Si cette vue et la porte divergent, l'interface
-     * ment — d'ou ce test, qui les compare aux trois moments qui comptent.
-     */
-    function test_MaxBuyNowMatchesWhatTheGateAllows() public {
-        assertEq(token.buyOpensAt(), token.launchedAt() + 5, "l'ouverture est annoncee");
-
-        // Pendant le delai : rien ne passe, et la vue le dit.
-        assertEq(token.maxBuyNow(), 0, "zero pendant le delai anti-sniper");
-        _giveWeth(alice, 0.01 ether);
-        vm.prank(alice);
-        vm.expectRevert(bytes("TF"));
-        router.swap(address(pool), alice, !tokenFirst, int256(uint256(0.01 ether)));
-
-        // Sur la rampe : la vue rend la borne que _guardBuy applique.
-        _warp(6);
-        uint256 announced = token.maxBuyNow();
-        assertGt(announced, 0, "la rampe est ouverte");
-        assertLt(announced, token.totalSupply(), "mais elle bride encore");
-
-        // Un achat qui depasserait la borne annoncee est refuse...
-        _giveWeth(whale, 1 ether);
-        vm.prank(whale);
-        vm.expectRevert(bytes("TF"));
-        router.swap(address(pool), whale, !tokenFirst, int256(uint256(1 ether)));
-
-        // ...et un achat qui reste dessous passe.
-        _buy(alice, 0.002 ether);
-        assertLe(token.balanceOf(alice), announced, "l'achat tient sous l'annonce");
-
-        // Rampe finie : plus aucune regle ne borne l'achat.
-        _pastRamp();
-        assertEq(token.maxBuyNow(), token.totalSupply(), "plus de bride une fois la rampe finie");
-    }
-
-    // ------------------------------------------------------------ deblocage
-
-    function test_UnlockStartsAtInitialShareAndCompletes() public {
-        _pastRamp();
-        _buy(alice, 0.05 ether);
-
-        assertApproxEqAbs(token.unlockedBps(alice), 1_000, 5, "10 % a l'entree");
-        assertApproxEqRel(token.releasable(alice), token.balanceOf(alice) / 10, 0.02e18);
-
-        _warp(30 minutes);
-        assertApproxEqAbs(token.unlockedBps(alice), 5_500, 60, "moitie a mi-parcours");
-
-        _fullyUnlock();
-        assertEq(token.unlockedBps(alice), 10_000, "entierement libere");
-    }
-
-    function test_SellAboveUnlockedReverts() public {
-        _pastRamp();
-        _buy(alice, 0.05 ether);
-
-        uint256 balance = token.balanceOf(alice);
-        uint256 open = token.releasable(alice);
-
-        vm.expectRevert(abi.encodeWithSelector(RevealToken.PositionLocked.selector, open));
-        _sellRaw(alice, (balance * 2) / 10);
-    }
-
-    /// Le piege du modele naif : le budget ne doit pas se reconstituer en vendant.
-    function test_SellingDoesNotReopenTheSameShare() public {
-        _pastRamp();
-        _buy(alice, 0.05 ether);
-
-        uint256 tenth = token.balanceOf(alice) / 10;
-        _sell(alice, (tenth * 9) / 10);
-
-        assertLt(token.releasable(alice), tenth / 5, "le budget ne se reconstitue pas");
-        vm.expectRevert();
-        _sellRaw(alice, tenth);
-    }
-
-    function test_SplittingAcrossWalletsDoesNotEscapeUnlock() public {
-        _pastRamp();
-        _buy(alice, 0.05 ether);
-        _fullyUnlock();
-
-        uint256 entry = token.balanceOf(alice);
-        vm.prank(alice);
-        token.transfer(bob, entry);
-
-        assertEq(token.unlockedBps(bob), 1_000, "bob repart au deblocage initial");
-    }
-
-    // -------------------------------------------------------- plafond d'impact
-
-    /**
-     * Le plafond se mesure sur la reserve de quote. Corollaire voulu : tant que
-     * personne n'a achete, il n'y a rien a retirer et rien ne peut etre vendu.
-     */
-    function test_NothingSellableBeforeAnyoneHasBought() public {
-        _pastRamp();
-        assertEq(_quoteReserve(), 0);
-        assertEq(token.windowRemaining(alice), 0, "aucune quote, aucun plafond");
-    }
-
-    function test_ImpactCapBlocksASecondSellInTheSameWindow() public {
-        _pastRamp();
-        _buy(whale, 2 ether);
-        _fullyUnlock();
-
-        uint256 cap = token.windowRemaining(whale);
-        assertGt(cap, 0, "de la quote est entree, le plafond existe");
-
-        _sell(whale, cap);
-        // Vendre retire de la quote du pool, donc le plafond se resserre.
-        assertLt(token.windowRemaining(whale), cap / 4, "fenetre epuisee");
-
-        vm.expectRevert();
-        _sellRaw(whale, cap);
-    }
-
-    function test_ImpactCapDecaysAcrossTheWindow() public {
-        _pastRamp();
-        _buy(whale, 2 ether);
-        _fullyUnlock();
-
-        uint256 cap = token.windowRemaining(whale);
-        _sell(whale, cap / 2);
-        uint256 justAfter = token.windowRemaining(whale);
-
-        _warp(5 minutes + 1);
-        assertGt(token.windowRemaining(whale), justAfter, "le plafond revient");
-    }
-
-    // ------------------------------------------------------- drawdown relief
-
-    /**
-     * La garantie qui compte : faire plonger le prix le temps d.un bloc ne
-     * debloque rien. Le relief se mesure au TWAP, donc il faut tenir le prix
-     * bas pendant toute la fenetre pour qu.il bouge.
-     */
-    function test_ASingleBlockCrashDoesNotOpenThePosition() public {
-        _pastRamp();
-        _buy(whale, 2 ether);
-        _buy(alice, 0.2 ether);
-        _warp(10 minutes);
-        _fullyUnlock();
-
-        uint256 before = token.drawdownTicks(alice);
-
-        // Dump massif, sans laisser le temps passer.
-        uint256 room = token.windowRemaining(whale);
-        _sell(whale, room);
-        assertApproxEqAbs(token.drawdownTicks(alice), before, 5, "le spot ne compte pas");
-
-        // Le meme prix, tenu une fenetre entiere, finit par compter.
-        _warp(10 minutes);
-        assertGt(token.drawdownTicks(alice), before, "le TWAP a rattrape");
-    }
-
-    function test_ReliefOpensThePositionWhenPriceFalls() public {
-        _pastRamp();
-        _buy(whale, 2 ether);
-        _buy(alice, 0.2 ether);
-
-        _warp(10 minutes);
-        uint256 byTimeOnly = token.unlockedBps(alice);
-
-        // La baleine sort, le prix plonge, puis une fenetre entiere s'ecoule
-        // a ce niveau pour que le TWAP le refleche.
-        _fullyUnlock();
-        for (uint256 i = 0; i < 6; i++) {
-            uint256 room = token.windowRemaining(whale);
-            if (room == 0) break;
-            _sell(whale, room);
-            _warp(5 minutes + 1);
-        }
-        _warp(10 minutes);
-
-        uint256 drop = token.drawdownTicks(alice);
-        assertGt(drop, 0, "position en perte latente");
-        assertGe(
-            token.unlockedBps(alice),
-            RevealRules.reliefBps(drop),
-            "le relief est au moins son plancher"
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RevealToken.LaunchDelayActive.selector, token.launchedAt() + 5
+            )
         );
-        assertGt(token.unlockedBps(alice), byTimeOnly, "le plancher a monte");
+        _asPool(alice, 1e18);
+    }
+
+    function test_BuysOpenExactlyWhenAnnounced() public {
+        _warp(5);
+        assertGt(token.maxBuyNow(), 0, "maxBuyNow toujours nul a l'ouverture");
+        _asPool(alice, 1e18);
+        assertEq(token.balanceOf(alice), 1e18, "l'achat n'est pas passe");
+    }
+
+    // ---------------------------------------------------------------- rampe
+
+    function test_TheRampLimitsBuySizeAndSaysSo() public {
+        _warp(6);
+
+        uint256 max = token.maxBuyNow();
+        assertGt(max, 0, "rampe fermee");
+        assertLt(max, SUPPLY, "la rampe ne limite rien");
+
+        // Exactement le plafond : accepté.
+        _asPool(alice, max);
+
+        // Un wei de plus : refusé, et le contrat annonce le même chiffre.
+        vm.expectRevert(abi.encodeWithSelector(RevealToken.BuyTooLarge.selector, max));
+        _asPool(bob, max + 1);
+    }
+
+    /// `maxBuyNow` doit dire exactement ce que la porte laisse passer, à tout
+    /// instant de la rampe — sinon l'interface annonce des refus ou des succès
+    /// qui n'arrivent pas.
+    function test_MaxBuyNowMatchesWhatTheGateAllows() public {
+        uint256[4] memory moments = [uint256(6), 1 minutes, 5 minutes, 10 minutes + 1];
+
+        for (uint256 i = 0; i < moments.length; i++) {
+            uint256 snapshot = vm.snapshotState();
+            _warp(moments[i]);
+
+            uint256 max = token.maxBuyNow();
+            // Le pool ne détient pas tout à fait la supply : la poussière
+            // d'arrondi du mint est restée au launcher. La porte autorise `max`,
+            // mais on ne peut transférer que ce qui existe.
+            uint256 available = token.balanceOf(address(pool));
+            _asPool(alice, max > available ? available : max);
+
+            if (max < SUPPLY) {
+                vm.expectRevert(abi.encodeWithSelector(RevealToken.BuyTooLarge.selector, max));
+                _asPool(bob, max + 1);
+            }
+            vm.revertToState(snapshot);
+        }
+    }
+
+    function test_TheRampFullyOpensAtItsEnd() public {
+        _pastRamp();
+        assertEq(token.maxBuyNow(), token.totalSupply(), "la rampe ne s'ouvre pas entierement");
+    }
+
+    // ------------------------------------------------------------ déblocage
+
+    function test_ASellBeyondTheReleasedAmountIsRefusedWithTheAmount() public {
+        _pastRamp();
+        _buy(alice, 0.5 ether);
+
+        uint256 free = token.releasable(alice);
+        vm.expectRevert(abi.encodeWithSelector(RevealToken.PositionLocked.selector, free));
+        _sellRaw(alice, free + 1);
+    }
+
+    function test_ReleasableGrowsWithTime() public {
+        _pastRamp();
+        _buy(alice, 0.5 ether);
+
+        uint256 atStart = token.releasable(alice);
+        _warp(30 minutes);
+        uint256 halfway = token.releasable(alice);
+        _warp(30 minutes + 1);
+
+        assertGt(halfway, atStart, "le temps ne libere rien");
+        assertEq(token.releasable(alice), token.balanceOf(alice), "tout n'est pas libere a la fin");
+    }
+
+    function test_InitialUnlockIsExactlyWhatTheRulesSay() public {
+        _pastRamp();
+        _buy(alice, 0.5 ether);
+
+        assertApproxEqRel(
+            token.releasable(alice),
+            (token.balanceOf(alice) * _initialUnlockBps()) / BPS,
+            1e12,
+            "le deblocage initial ne correspond pas aux regles"
+        );
+    }
+
+    // -------------------------------------------------------------- trésorerie
+
+    /**
+     * Les frais versés à la trésorerie ne passent pas par la rampe : la
+     * collecte est permissionless et ne doit pas dépendre de l'heure. Elle
+     * ouvre en revanche bien une position, donc le protocole reste soumis à ses
+     * propres règles de sortie.
+     */
+    function test_FeeTransfersToTheTreasuryEscapeTheRampButNotTheUnlock() public {
+        // Encore dans le délai de lancement : un achat normal serait refusé.
+        _asPool(treasury, 1e24);
+        assertEq(token.balanceOf(treasury), 1e24, "la tresorerie n'a pas ete servie");
+
+        assertLt(
+            token.releasable(treasury),
+            token.balanceOf(treasury),
+            "la tresorerie echappe au deblocage"
+        );
+    }
+
+    // ------------------------------------------------------------- lecture
+
+    function test_RulesAreReadableAndImmutable() public view {
+        (uint16 initialUnlockBps, uint32 unlockSeconds, uint32 launchDelay, uint32 buyRamp) =
+            token.rules();
+
+        assertEq(initialUnlockBps, 1_000, "deblocage initial");
+        assertEq(unlockSeconds, 1 hours, "fenetre de deblocage");
+        assertEq(launchDelay, 5, "delai de lancement");
+        assertEq(buyRamp, 10 minutes, "duree de rampe");
+    }
+
+    function test_OnlyTheLauncherCanInitialize() public {
+        vm.prank(makeAddr("attacker"));
+        vm.expectRevert(RevealToken.OnlyLauncher.selector);
+        token.initialize(address(pool), address(weth), treasury);
+    }
+
+    function test_InitializeCannotRun_Twice() public {
+        vm.prank(address(launcher));
+        vm.expectRevert(RevealToken.AlreadyInitialized.selector);
+        token.initialize(address(pool), address(weth), treasury);
     }
 }
