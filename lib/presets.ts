@@ -33,7 +33,7 @@ export type Rules = {
  */
 export const RULES: Rules = {
   initialUnlock: 10,
-  unlockHours: 1,
+  unlockHours: 0.25,
   launchDelay: 5,
   buyRamp: 10,
 };
@@ -41,7 +41,22 @@ export const RULES: Rules = {
 /** Seuil de graduation, en ETH. Statut seulement : rien ne migre. */
 export const GRADUATION_QUOTE_ETH = 4.2;
 
+/**
+ * Part de la supply que le créateur peut acheter dans la transaction de
+ * lancement, en %. Le contrat le dit aussi — `creatorBuyCap()` — et c'est lui
+ * qui fait foi ; cette copie sert aux pages qui décrivent le protocole sans
+ * viser un déploiement.
+ */
+export const CREATOR_BUY_MAX_PERCENT = 5;
+
+/**
+ * La fenêtre de déblocage est passée sous l'heure, donc « 1h » ne suffit plus
+ * à l'écrire. Les minutes sont rendues telles quelles plutôt qu'en fraction
+ * d'heure : « 0.25h » est exact et illisible, ce qui n'est pas un compromis
+ * acceptable sur la seule règle que les gens ont besoin de comprendre.
+ */
 export function formatDuration(hours: number) {
   if (hours >= 24 && hours % 24 === 0) return `${hours / 24}d`;
+  if (hours < 1) return `${Math.round(hours * 60)} min`;
   return `${hours}h`;
 }

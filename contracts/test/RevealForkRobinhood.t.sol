@@ -74,7 +74,7 @@ contract RevealForkRobinhoodTest is Test {
             treasury,
             Rules({
                 initialUnlockBps: 1_000,
-                unlockSeconds: 1 hours,
+                unlockSeconds: 15 minutes,
                 launchDelay: 5,
                 buyRamp: 10 minutes
             })

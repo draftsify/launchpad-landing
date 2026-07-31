@@ -52,10 +52,17 @@ abstract contract RevealBase is Test {
     address internal whale = makeAddr("whale");
     address internal treasury = makeAddr("treasury");
 
+    /**
+     * La fenêtre de déblocage des tests est celle du déploiement, pas une
+     * valeur commode : un test qui se donne des règles plus douces que la
+     * production ne prouve rien sur la production.
+     */
+    uint32 internal constant UNLOCK_WINDOW = 15 minutes;
+
     function defaultRules() internal pure returns (Rules memory) {
         return Rules({
             initialUnlockBps: 1_000, // 10 %
-            unlockSeconds: 1 hours,
+            unlockSeconds: UNLOCK_WINDOW,
             launchDelay: 5,
             buyRamp: 10 minutes
         });
@@ -142,7 +149,7 @@ abstract contract RevealBase is Test {
 
     /// Au-delà de `unlockSeconds`, le temps a tout ouvert.
     function _fullyUnlock() internal {
-        _warp(1 hours + 1);
+        _warp(UNLOCK_WINDOW + 1);
     }
 
     function _pastRamp() internal {

@@ -14,7 +14,7 @@ import { LaunchButton } from "@/components/site/launch-button";
 const RULES = [
   {
     title: "Selling opens progressively",
-    body: "A share is sellable from the first block, the rest unlocks steadily. Nobody is locked in, nobody empties the pool in the first minute.",
+    body: "A tenth is sellable from the first block, the rest unlocks steadily and everything is free after fifteen minutes. Nobody is locked in, nobody empties the pool in the first minute.",
   },
   {
     title: "Losses open the gate faster",
@@ -40,6 +40,10 @@ const STEPS = [
   {
     title: "Launch",
     body: "One transaction deploys the token, opens its pool and arms the rules. Nobody puts up capital: the whole supply sits on one side of the range, so the buyers' ETH becomes the liquidity. You pay gas.",
+  },
+  {
+    title: "Buy first, if you want",
+    body: "A creator may take the first position inside the launch transaction, capped at 5% of the supply. It is the one advantage the protocol grants anyone, and it buys order, not exemption: those tokens unlock on exactly the same schedule as everyone else's.",
   },
   {
     title: "Discover",

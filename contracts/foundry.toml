@@ -12,7 +12,14 @@ auto_detect_solc = true
 # et il échoue à la toute fin de `run()`, donc après le déploiement dans
 # l'esprit de qui le lance. Trouvé en simulant le déploiement mainnet plutôt
 # qu'en le découvrant pendant.
-fs_permissions = [{ access = "read-write", path = "./deployments" }]
+# `out` en lecture : déclarer une permission désactive le défaut permissif, donc
+# les `vm.getCode` des tests — qui chargent les artefacts de Uniswap compilés
+# sous leur propre version de solc — se sont mis à échouer dès l'ajout de la
+# ligne suivante. Trouvé en relançant la suite, pas en le devinant.
+fs_permissions = [
+    { access = "read", path = "./out" },
+    { access = "read-write", path = "./deployments" },
+]
 
 remappings = [
     "forge-std/=lib/forge-std/src/",

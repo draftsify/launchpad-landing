@@ -55,8 +55,18 @@ contract Deploy is Script {
 
     /**
      * Règles du protocole, identiques pour tout lancement. Un dixième vendable
-     * dès le premier bloc, tout ouvert au bout d'une heure : de quoi étaler la
-     * première vague sans immobiliser qui que ce soit.
+     * dès le premier bloc, tout ouvert au bout d'un quart d'heure : de quoi
+     * étaler la première vague sans immobiliser qui que ce soit.
+     *
+     * La fenêtre a été ramenée d'une heure à quinze minutes. C'est un
+     * assouplissement assumé, pas une correction : la contrainte suffit à tenir
+     * la thèse — la vente est métrée, jamais interdite — et une heure
+     * immobilisait plus longtemps que ce que la découverte de prix demande.
+     *
+     * La rampe d'achat reste à dix minutes, donc les deux tiers de la fenêtre
+     * de déblocage. Ce n'est pas un oubli : elle borne la *taille* des premiers
+     * achats, pas la sortie, et c'est elle qui empêche un seul ordre de prendre
+     * toute la courbe pendant que la profondeur est nulle.
      *
      * Il n'y a plus de plafond de vente par fenêtre. Voir `RevealToken` : la
      * réserve qu'il prétendait mesurer n'est pas lisible honnêtement depuis un
@@ -65,7 +75,7 @@ contract Deploy is Script {
     function _rules() private pure returns (Rules memory) {
         return Rules({
             initialUnlockBps: 1_000,
-            unlockSeconds: 1 hours,
+            unlockSeconds: 15 minutes,
             launchDelay: 5,
             buyRamp: 10 minutes
         });

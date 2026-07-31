@@ -5,6 +5,7 @@ import { ArrowLeft, Globe, Loader2, Send, TriangleAlert } from "lucide-react";
 
 import { activeChain, explorerAddress, isDeployed } from "@/lib/chain";
 import { formatAge, formatEth, formatTokens } from "@/lib/format";
+import { formatDuration } from "@/lib/presets";
 import { Button } from "@/components/ui/button";
 import { CopyAddress } from "@/components/site/copy-address";
 import { FullWidthDivider } from "@/components/full-width-divider";
@@ -281,7 +282,7 @@ export function TokenDetail({ slug }: { slug: string }) {
             <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ["Sellable at launch", `${rules.initialUnlock}%`],
-                ["Fully unlocked after", `${rules.unlockHours}h`],
+                ["Fully unlocked after", formatDuration(rules.unlockHours)],
                 ["Buy ramp", `${rules.buyRamp} min`],
                 ["Launch delay", `${rules.launchDelay}s`],
               ].map(([label, value]) => (

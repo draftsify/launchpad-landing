@@ -19,6 +19,7 @@ import { LaunchButton } from "@/components/site/launch-button";
 import {
   ERRORS,
   EVENTS,
+  CREATOR_BUY_PARAMS,
   GRADUATION_PARAMS,
   RELIEF_PARAMS,
   SNIPER_PARAMS,
@@ -101,7 +102,17 @@ function launch(
     string calldata name,
     string calldata symbol,
     string calldata metadataURI   // image, description, links
-) external returns (address token, address pool);`}</Code>
+) external returns (address token, address pool);
+
+// The same launch, plus a buy for the creator in the same transaction --
+// the first position on the curve, before the anti-sniper delay opens for
+// anyone else. Capped at CREATOR_BUY_MAX_BPS of the supply, and locked on
+// the ordinary schedule: earlier in, never earlier out.
+function launchWithBuy(
+    string calldata name,
+    string calldata symbol,
+    string calldata metadataURI
+) external payable returns (address token, address pool);`}</Code>
               <Prose>
                 One transaction deploys the token, creates its pool, seeds it,
                 and arms the rules. There is never a moment where the token
@@ -138,7 +149,7 @@ function launch(
                   {
                     term: "2 · Delay window",
                     description:
-                      "For launchDelay seconds, buys revert. This removes the same-block advantage that lets a bot own the first print.",
+                      "For launchDelay seconds, buys revert. This removes the same-block advantage that lets a bot own the first print. One exception, and only one: a creator using launchWithBuy buys inside the launch block itself, capped at 5% of the supply.",
                   },
                   {
                     term: "3 · Buy ramp",
@@ -378,6 +389,34 @@ uint256 relief = drop * 10_000 / 6_932;      // 6932 ticks = a halving`}</Code>
               </Prose>
             </DocSection>
 
+            <DocSection
+              id="devbuy"
+              title="Dev buy"
+              lede="The one advantage the protocol hands to a named party."
+            >
+              <Prose>
+                A creator may buy their own token inside the launch transaction,
+                through <Inline>launchWithBuy</Inline>. That means the first
+                position on the curve, at the opening price, before the
+                anti-sniper delay lets anyone else in. It is a real advantage
+                and it is written down here rather than folded into a sentence
+                about fair launches.
+              </Prose>
+              <ParamTable params={CREATOR_BUY_PARAMS} />
+              <Callout title="Buying earlier is not selling earlier">
+                Tokens bought this way are locked on the same schedule as every
+                other buy. There is no path in the contracts that releases a
+                creator faster — the transfer hook does not know who anyone is
+                once the launch block has passed.
+              </Callout>
+              <Callout title="How to tell">
+                Every dev buy emits <Inline>CreatorBought</Inline> from the
+                launcher, in the same transaction as <Inline>Launched</Inline>. A
+                launch that took the first position is distinguishable from one
+                that did not, without reading pool transfers.
+              </Callout>
+            </DocSection>
+
             {/* --------------------------- Reference --------------------- */}
 
             <DocSection
@@ -576,16 +615,23 @@ curl "$RPC" -d '{"method":"eth_getLogs","params":[{
                       "Uniswap wraps transfers, so a refused sell reaches the user as TF, not as PositionLocked. Any interface that skips the releasable view will show its users a failure it cannot explain.",
                   },
                   {
+                    term: "The creator gets the first position",
+                    description:
+                      "launchWithBuy lets a creator buy up to 5% of the supply inside the launch block, before the anti-sniper delay opens for anyone else. Whoever buys next pays a price the creator already moved. The lock applies to them identically — it costs later buyers position, not protection — but it is an asymmetry, and it is not going to be argued away here.",
+                  },
+                  {
                     term: "History is recomputed, not stored",
                     description:
                       "The indexer keeps no database: every figure is rebuilt from logs on request. That means nothing to fall out of sync, and no historical claim that cannot be re-derived from the chain — but it also means the cost grows with a pool's history, and that a node refusing to serve logs takes the whole history down with it. The live price never depends on it.",
                   },
                 ]}
               />
-              <Callout title="Status" tone="warning">
-                This documentation describes intended behaviour for a protocol
-                still in development. Names, ranges and defaults will move
-                before audit, and no contract has been deployed.
+              <Callout title="No audit" tone="warning">
+                The contracts are live on Robinhood Chain and nobody
+                independent has reviewed them. They carry a test suite and were
+                rehearsed against a fork of the chain before deployment, which
+                is not the same thing as an audit and is not offered as one.
+                Treat every launch here as unaudited code holding real money.
               </Callout>
             </DocSection>
           </div>

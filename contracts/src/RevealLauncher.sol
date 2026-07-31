@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {
     IUniswapV3Factory, IUniswapV3Pool
 } from "./interfaces/IUniswapV3.sol";
+import {IWETH} from "./interfaces/IUniswapV2.sol";
 import {INonfungiblePositionManager} from "./interfaces/INonfungiblePositionManager.sol";
 import {LiquidityAmounts} from "./libraries/LiquidityAmounts.sol";
 import {Rules, RevealRules} from "./libraries/RevealRules.sol";
@@ -101,6 +102,19 @@ contract RevealLauncher {
         Rules rules
     );
 
+    /**
+     * Achat du créateur dans la transaction de lancement. Émis séparément, et
+     * toujours : un lancement qui s'est offert la première position doit se
+     * distinguer d'un lancement qui ne l'a pas fait, sans avoir à relire les
+     * transferts du pool.
+     */
+    event CreatorBought(
+        address indexed token,
+        address indexed creator,
+        uint256 quoteIn,
+        uint256 tokensOut
+    );
+
     error NotAContract(address who);
     error ZeroAddress();
     error SupplyOutOfRange();
@@ -113,8 +127,22 @@ contract RevealLauncher {
     error LiquidityMismatch(uint128 expected, uint128 actual);
     error WrongInitialTick(int24 expected, int24 actual);
     error Reentrancy();
+    error NoCreatorBuy();
+    error UnexpectedCallback(address caller);
+    error CreatorBuyRefundFailed();
 
     uint256 private _entered;
+
+    /**
+     * Le pool dont on attend le rappel de swap, le temps d'un swap.
+     *
+     * `uniswapV3SwapCallback` est appelable par n'importe qui : sans ce
+     * verrou, une fausse paire appellerait le rappel pour nous faire payer un
+     * swap qui n'est pas le nôtre. On n'interroge pas la factory pour
+     * l'authentifier — on n'accepte le rappel que pendant le swap qu'on vient
+     * nous-mêmes de déclencher, ce qui est plus étroit.
+     */
+    address private _swapPool;
 
     modifier nonReentrant() {
         if (_entered == 1) revert Reentrancy();
@@ -181,6 +209,17 @@ contract RevealLauncher {
     }
 
     /**
+     * Le plus gros achat que le créateur puisse faire au lancement, en tokens.
+     *
+     * Lisible avant qu'un token existe, ce qui est tout l'intérêt : l'interface
+     * doit pouvoir annoncer le plafond au moment où le formulaire se remplit,
+     * pas le découvrir sur un échec.
+     */
+    function creatorBuyCap() external view returns (uint256) {
+        return (supply * RevealRules.CREATOR_BUY_MAX_BPS) / RevealRules.BPS;
+    }
+
+    /**
      * Liquidité que la supply représente sur la plage, dérivée et non transcrite.
      *
      * Publique parce que c'est le nombre à confronter à la chaîne : pour une
@@ -221,6 +260,41 @@ contract RevealLauncher {
         string calldata symbol,
         string calldata metadataURI
     ) external nonReentrant returns (address token, address pool) {
+        return _launch(name, symbol, metadataURI);
+    }
+
+    /**
+     * Le même lancement, suivi immédiatement d'un achat payé par le créateur.
+     *
+     * Ce que ça donne, dit sans détour : la première position du token, au prix
+     * d'ouverture, garantie. Le délai anti-sniper protège tout le monde du
+     * créateur mais pas le contraire — c'est le sens même d'un dev buy, et le
+     * cacher derrière un vocabulaire neutre serait pire que de l'assumer.
+     *
+     * Ce que ça ne donne pas : aucune dispense de sortie. Les tokens achetés
+     * ici sont verrouillés exactement comme ceux de n'importe quel acheteur, et
+     * le plafond de `RevealToken.CREATOR_BUY_MAX_BPS` s'applique — vérifié par
+     * le token lui-même, pas seulement ici.
+     *
+     * L'achat passe directement par le pool. Aucun routeur n'est appelé : ce
+     * serait une adresse de plus à qui faire confiance, pour un swap dont on
+     * connaît déjà tous les paramètres.
+     */
+    function launchWithBuy(
+        string calldata name,
+        string calldata symbol,
+        string calldata metadataURI
+    ) external payable nonReentrant returns (address token, address pool) {
+        if (msg.value == 0) revert NoCreatorBuy();
+        (token, pool) = _launch(name, symbol, metadataURI);
+        _creatorBuy(token, pool, token < quote);
+    }
+
+    function _launch(
+        string calldata name,
+        string calldata symbol,
+        string calldata metadataURI
+    ) private returns (address token, address pool) {
         RevealToken deployed = new RevealToken(name, symbol, metadataURI, supply, rules);
         token = address(deployed);
 
@@ -233,7 +307,7 @@ contract RevealLauncher {
         // TWAP, donc aucun drawdown relief tant que le pool n'a pas grandi.
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinality);
 
-        deployed.initialize(pool, quote, locker.treasury());
+        deployed.initialize(pool, quote, locker.treasury(), msg.sender);
         tokens.push(token);
 
         Launch memory l = launches[token];
@@ -248,6 +322,81 @@ contract RevealLauncher {
             l.tickUpper,
             rules
         );
+    }
+
+    /**
+     * Enveloppe l'ETH reçu et l'échange contre du token, livré au créateur.
+     *
+     * Le tout dans la transaction de lancement, donc dans le bloc où la fenêtre
+     * du créateur est ouverte — c'est ce qui rend l'achat possible, et c'est
+     * aussi ce qui le borne : au bloc suivant, cette fonction ne pourrait plus
+     * rien faire de particulier.
+     */
+    function _creatorBuy(address token, address pool, bool tokenIsToken0) private {
+        IWETH(quote).deposit{value: msg.value}();
+
+        // On donne la quote et on reçoit le token : le sens du swap est celui
+        // de la quote vers le token, donc dicté par la place de la quote.
+        bool zeroForOne = !tokenIsToken0;
+
+        _swapPool = pool;
+        (int256 amount0, int256 amount1) = IUniswapV3Pool(pool).swap(
+            msg.sender,
+            zeroForOne,
+            int256(msg.value),
+            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+            abi.encode(zeroForOne)
+        );
+        _swapPool = address(0);
+
+        // Négatif = sorti du pool, donc reçu par le créateur.
+        int256 out = tokenIsToken0 ? amount0 : amount1;
+        uint256 tokensOut = uint256(-out);
+
+        /**
+         * Une plage épuisée rendrait la quote non consommée. Elle ne doit alors
+         * pas rester ici : ce contrat ne détient rien, jamais, sinon la
+         * prochaine personne à lancer paierait pour la précédente.
+         */
+        uint256 left = IWETH(quote).balanceOf(address(this));
+        if (left != 0 && !IWETH(quote).transfer(msg.sender, left)) {
+            revert CreatorBuyRefundFailed();
+        }
+
+        emit CreatorBought(token, msg.sender, msg.value - left, tokensOut);
+    }
+
+    /**
+     * Le rappel de swap : on doit au pool ce qu'il vient de nous avancer.
+     *
+     * Seul le pool du swap en cours peut l'appeler, et on ne règle que la
+     * quote — devoir du token voudrait dire qu'on est en train d'en vendre,
+     * ce que ce contrat ne fait jamais.
+     */
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        if (msg.sender != _swapPool || _swapPool == address(0)) {
+            revert UnexpectedCallback(msg.sender);
+        }
+
+        /**
+         * Le côté dû est celui de la quote, pas « celui qui est positif ».
+         *
+         * La nuance a l'air oiseuse ici, puisque ce contrat n'échange jamais
+         * que de la quote contre du token. Elle ne l'est pas : lire le signe
+         * ferait régler en quote un montant exprimé en token si le sens du swap
+         * changeait un jour, et ce genre d'erreur ne se voit qu'une fois payée.
+         */
+        bool zeroForOne = abi.decode(data, (bool));
+        int256 owed = zeroForOne ? amount0Delta : amount1Delta;
+        if (owed <= 0) return;
+
+        if (!IWETH(quote).transfer(msg.sender, uint256(owed))) {
+            revert CreatorBuyRefundFailed();
+        }
     }
 
     /**

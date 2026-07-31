@@ -150,7 +150,7 @@ contract RevealGatesTest is RevealBase {
             token.rules();
 
         assertEq(initialUnlockBps, 1_000, "deblocage initial");
-        assertEq(unlockSeconds, 1 hours, "fenetre de deblocage");
+        assertEq(unlockSeconds, 15 minutes, "fenetre de deblocage");
         assertEq(launchDelay, 5, "delai de lancement");
         assertEq(buyRamp, 10 minutes, "duree de rampe");
     }
@@ -158,12 +158,12 @@ contract RevealGatesTest is RevealBase {
     function test_OnlyTheLauncherCanInitialize() public {
         vm.prank(makeAddr("attacker"));
         vm.expectRevert(RevealToken.OnlyLauncher.selector);
-        token.initialize(address(pool), address(weth), treasury);
+        token.initialize(address(pool), address(weth), treasury, creator);
     }
 
     function test_InitializeCannotRun_Twice() public {
         vm.prank(address(launcher));
         vm.expectRevert(RevealToken.AlreadyInitialized.selector);
-        token.initialize(address(pool), address(weth), treasury);
+        token.initialize(address(pool), address(weth), treasury, creator);
     }
 }

@@ -5,6 +5,10 @@ import { LAUNCHER_ADDRESS, publicClient } from "@/lib/chain";
 /// Sous-ensemble de RevealLauncher dont l'interface a besoin.
 export const launcherAbi = parseAbi([
   "function launch(string name, string symbol, string metadataURI) returns (address token, address pool)",
+  // Le même lancement, suivi d'un achat payé par le créateur dans la même
+  // transaction. `value` porte le montant : il n'y a pas de paramètre pour ça.
+  "function launchWithBuy(string name, string symbol, string metadataURI) payable returns (address token, address pool)",
+  "function creatorBuyCap() view returns (uint256)",
   "function tokenCount() view returns (uint256)",
   "function tokens(uint256) view returns (address)",
   "function supply() view returns (uint256)",
@@ -12,6 +16,7 @@ export const launcherAbi = parseAbi([
   "function locker() view returns (address)",
   "function launches(address token) view returns (address pool, uint256 tokenId, uint128 liquidity, int24 tickLower, int24 tickUpper, address creator, uint64 launchedAt)",
   "event Launched(address indexed token, address indexed creator, address pool, uint256 tokenId, uint256 supply, uint128 liquidity, int24 tickLower, int24 tickUpper, (uint16,uint32,uint32,uint32) rules)",
+  "event CreatorBought(address indexed token, address indexed creator, uint256 quoteIn, uint256 tokensOut)",
 ]);
 
 /**
@@ -64,12 +69,28 @@ export const tokenAbi = parseAbi([
  * Prépare l'appel. La transaction est signée par le wallet de l'utilisateur —
  * ce fichier n'a jamais accès à une clé.
  */
-export function launchCall(name: string, symbol: string, metadataURI: string) {
+/**
+ * L'appel de lancement, avec ou sans achat du créateur.
+ *
+ * Deux fonctions plutôt qu'un paramètre à zéro : `launchWithBuy` est payable et
+ * refuse une valeur nulle, donc le choix se lit dans la transaction elle-même.
+ * Un lancement qui s'est offert la première position ne doit pas ressembler à
+ * un lancement qui ne l'a pas fait.
+ */
+export function launchCall(
+  name: string,
+  symbol: string,
+  metadataURI: string,
+  devBuyWei: bigint = 0n
+) {
   return {
     address: LAUNCHER_ADDRESS as `0x${string}`,
     abi: launcherAbi,
-    functionName: "launch" as const,
+    functionName: (devBuyWei > 0n ? "launchWithBuy" : "launch") as
+      | "launch"
+      | "launchWithBuy",
     args: [name, symbol, metadataURI] as const,
+    value: devBuyWei,
   };
 }
 

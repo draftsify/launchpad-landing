@@ -44,6 +44,7 @@ export const DOC_NAV: DocGroup[] = [
       { id: "relief", label: "Drawdown relief", icon: CircleDot },
       { id: "graduation", label: "Graduation", icon: SlidersHorizontal },
       { id: "antisniper", label: "Anti-sniper", icon: ShieldCheck },
+      { id: "devbuy", label: "Dev buy", icon: Coins },
     ],
   },
   {
@@ -92,10 +93,42 @@ export const UNLOCK_PARAMS: Param[] = [
   {
     name: "unlockSeconds",
     type: "uint32",
-    bound: "1h – 7d",
-    value: "3600",
+    bound: "15min – 7d",
+    value: "900",
     description:
-      "Seconds from entry to fully sellable, on a straight line from initialUnlockBps to 10000. Buying more re-weights entry time downward, so topping up makes a position younger.",
+      "Seconds from entry to fully sellable, on a straight line from initialUnlockBps to 10000. Buying more re-weights entry time downward, so topping up makes a position younger. The floor is three TWAP windows: any shorter and the relief mechanism would cover most of the constraint's life, leaving no constraint.",
+  },
+];
+
+/**
+ * Le dev buy. Il est décrit ici avec les autres paramètres, et pas dans une
+ * page marketing : c'est le seul avantage que le protocole accorde à quelqu'un,
+ * donc il se lit au même endroit que les règles qui s'appliquent à tous.
+ */
+export const CREATOR_BUY_PARAMS: Param[] = [
+  {
+    name: "CREATOR_BUY_MAX_BPS",
+    type: "uint16",
+    bound: "constant",
+    value: "500",
+    description:
+      "Most of the supply a creator may buy in their own launch transaction — five percent, about 0.072 ETH on this curve. Cumulative across the launch block, not per transaction, so several buys cannot walk around it.",
+  },
+  {
+    name: "creator window",
+    type: "block",
+    bound: "launch block",
+    value: "—",
+    description:
+      "The creator, and only the creator, may buy while launchDelay is still running — but only in the block that launched the token. One second later they are an ordinary buyer facing the same anti-sniper delay as everyone else.",
+  },
+  {
+    name: "what it does not grant",
+    type: "—",
+    bound: "—",
+    value: "—",
+    description:
+      "Nothing on the way out. Tokens bought this way open an ordinary position: same initialUnlockBps, same unlockSeconds, same relief. The creator can buy earlier, never sell earlier.",
   },
 ];
 
@@ -190,6 +223,12 @@ export const EVENTS: EventDef[] = [
       "Emitted once per launch, by the launcher. tokenId is the Uniswap V3 position NFT, minted straight to the locker. Name, symbol and metadataURI are not repeated here — they are read from the token, which keeps the event off the compiler's stack limit.",
   },
   {
+    signature:
+      "CreatorBought(address token, address creator, uint256 quoteIn, uint256 tokensOut)",
+    description:
+      "The creator took the first position inside their own launch transaction. Emitted only when that happened, so a launch that bought its own float is distinguishable from one that did not without reading pool transfers.",
+  },
+  {
     signature: "Entry(address holder, uint256 amount, uint64 lockStart, int24 lockTick)",
     description:
       "A position acquired tokens from the pool. Carries the merged tranche's state, so an indexer never has to recompute it. A plain incoming transfer emits nothing here: what left the sender was already unlocked, so it arrives unlocked.",
@@ -231,6 +270,11 @@ export const ERRORS: ErrorDef[] = [
       "The buy exceeds what the ramp allows at this point. Returns the size that would pass.",
   },
   {
+    name: "CreatorBuyTooLarge(uint256 remaining)",
+    description:
+      "The creator's buy would carry their launch-block total past CREATOR_BUY_MAX_BPS. Returns what is left under the cap. It fails the whole launch, not just the buy — a half-launched token would be worse.",
+  },
+  {
     name: "PositionLocked(uint256 releasable)",
     description:
       "The position may not release this much yet. Returns the amount that would succeed — offer that rather than a bare failure.",
@@ -238,7 +282,7 @@ export const ERRORS: ErrorDef[] = [
   {
     name: "StringTooLong()",
     description:
-      "Name, symbol or metadataURI is empty or past its bound — 64, 16 and 4096 bytes. Without a bound, a launch could cost arbitrary gas and the token would be unreadable to any indexer.",
+      "Name, symbol or metadataURI is empty or past its bound — 64, 16 and 16384 bytes. Without a bound, a launch could cost arbitrary gas and the token would be unreadable to any indexer.",
   },
   {
     name: "OnlyLauncher() · AlreadyInitialized()",

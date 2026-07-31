@@ -12,6 +12,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { formatEther, parseEther } from "viem";
 
 import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/x-icon";
@@ -33,11 +34,35 @@ import {
   toDataUri,
 } from "@/lib/metadata";
 import { useWallet } from "@/components/site/wallet-provider";
-import { formatDuration } from "@/lib/presets";
+import { CREATOR_BUY_MAX_PERCENT, formatDuration } from "@/lib/presets";
+import { readCreatorBuyCap } from "@/lib/onchain";
+import { estimateCreatorBuy, maxCreatorBuyQuote } from "@/lib/uniswap";
+import { formatTokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const MAX_DESCRIPTION = 280;
+
+/**
+ * La supply d'un lancement, en wei. Identique pour tous — c'est une immuable du
+ * launcher, pas un choix du créateur — donc la recopier ici ne peut pas
+ * diverger sans qu'un redéploiement l'ait décidé. Sert à exprimer l'achat du
+ * créateur en part de la supply avant que le token existe.
+ */
+const SUPPLY_GUESS = 1_000_000_000n * 10n ** 18n;
+
+/**
+ * Un montant en ETH lisible, tronqué et jamais arrondi.
+ *
+ * La troncature n'est pas cosmétique : ce nombre remplit le bouton « Max », et
+ * un arrondi vers le haut le placerait au-dessus du plafond — le lancement
+ * entier échouerait, pour un affichage plus joli.
+ */
+function ethLabel(wei: bigint, decimals = 4) {
+  const [whole, frac = ""] = formatEther(wei).split(".");
+  const cut = frac.slice(0, decimals).replace(/0+$/, "");
+  return cut ? `${whole}.${cut}` : whole;
+}
 
 /* ------------------------------- primitives ------------------------------ */
 
@@ -102,17 +127,21 @@ function PrefixInput({
   id,
   icon,
   prefix,
+  suffix,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
   id: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   prefix?: string;
+  suffix?: string;
 }) {
   return (
-    <div className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 transition-colors focus-within:border-foreground/60">
-      <span aria-hidden className="shrink-0 text-muted-foreground [&_svg]:size-3.5">
-        {icon}
-      </span>
+    <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border bg-card px-3 transition-colors focus-within:border-foreground/60">
+      {icon && (
+        <span aria-hidden className="shrink-0 text-muted-foreground [&_svg]:size-3.5">
+          {icon}
+        </span>
+      )}
       {prefix && (
         <span className="shrink-0 font-mono text-xs text-muted-foreground">
           {prefix}
@@ -123,6 +152,11 @@ function PrefixInput({
         className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         {...props}
       />
+      {suffix && (
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+          {suffix}
+        </span>
+      )}
     </div>
   );
 }
@@ -149,6 +183,44 @@ export function CreateForm() {
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
   const [discord, setDiscord] = useState("");
+
+  const [devBuyOn, setDevBuyOn] = useState(false);
+  const [devBuy, setDevBuy] = useState("");
+
+  /**
+   * Le plafond vient du launcher, pas d'ici. La constante du dépôt sert de
+   * première réponse le temps que la chaîne parle — même arbitrage que pour les
+   * règles : c'est le contrat qui applique.
+   */
+  const [cap, setCap] = useState<bigint>(
+    (SUPPLY_GUESS * BigInt(CREATOR_BUY_MAX_PERCENT)) / 100n
+  );
+  useEffect(() => {
+    let alive = true;
+    readCreatorBuyCap()
+      .then((onchain) => {
+        if (alive && onchain) setCap(onchain);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const maxDevBuyWei = maxCreatorBuyQuote(cap);
+  // Une saisie en cours — « 0. », « », « abc » — ne doit pas casser le rendu.
+  const devBuyWei = (() => {
+    if (!devBuyOn) return 0n;
+    try {
+      const parsed = parseEther(devBuy.trim() || "0");
+      return parsed > 0n ? parsed : 0n;
+    } catch {
+      return 0n;
+    }
+  })();
+  const devBuyEstimate = estimateCreatorBuy(devBuyWei);
+  const devBuyShare = Number(devBuyEstimate) / Number(SUPPLY_GUESS) * 100;
+  const devBuyTooLarge = devBuyWei > maxDevBuyWei;
 
   const fileRef = useRef<HTMLInputElement>(null);
   const objectUrl = useRef<string | null>(null);
@@ -210,7 +282,7 @@ export function CreateForm() {
       }
 
       const { encodeFunctionData } = await import("viem");
-      const call = launchCall(name.trim(), ticker.trim(), metadataURI);
+      const call = launchCall(name.trim(), ticker.trim(), metadataURI, devBuyWei);
       const data = encodeFunctionData({
         abi: call.abi,
         functionName: call.functionName,
@@ -221,10 +293,18 @@ export function CreateForm() {
       // d'observations : près de 10 M de gas. C'est exactement le cas où
       // l'estimation d'un wallet tombe court et où la transaction meurt en
       // OutOfGas après avoir été signée.
+      /**
+       * L'estimation sert de simulation, et c'est elle qui garantit le dev buy.
+       * Un achat au-dessus du plafond fait échouer le lancement *entier* — le
+       * calcul affiché plus haut est une estimation, celui-ci s'exécute contre
+       * l'état réel de la chaîne. Mieux vaut échouer ici que sur un token à
+       * moitié lancé.
+       */
       const gas = await gasWithBuffer({
         account: account as `0x${string}`,
         to: LAUNCHER_ADDRESS as `0x${string}`,
         data,
+        value: devBuyWei,
       });
 
       const hash = (await provider.request({
@@ -235,6 +315,9 @@ export function CreateForm() {
             to: LAUNCHER_ADDRESS,
             data,
             gas: `0x${gas.toString(16)}`,
+            ...(devBuyWei > 0n
+              ? { value: `0x${devBuyWei.toString(16)}` }
+              : {}),
           },
         ],
       })) as `0x${string}`;
@@ -261,7 +344,10 @@ export function CreateForm() {
   }
 
   const working = status.kind === "working";
-  const canSubmit = name.trim().length > 0 && ticker.trim().length > 0;
+  // Un dev buy au-dessus du plafond ferait échouer le lancement entier, donc il
+  // bloque le bouton plutôt que la transaction.
+  const canSubmit =
+    name.trim().length > 0 && ticker.trim().length > 0 && !devBuyTooLarge;
   // Le libellé et l'état désactivé doivent découler de la même condition :
   // proposer « changer de réseau » sur un bouton grisé n'a aucun sens.
   const needsChain = isDeployed && chainId !== null && !onCorrectChain;
@@ -481,6 +567,108 @@ export function CreateForm() {
             A position also opens faster when it is underwater: half the entry
             price releases it entirely, whatever the clock says.
           </p>
+        </Section>
+
+        <Section
+          step="04"
+          title="Dev buy"
+          hint="Buy your own token in the launch transaction, before anyone else can. This is the one privilege the protocol grants, so it is stated rather than hidden."
+        >
+          <div
+            role="tablist"
+            aria-label="Dev buy"
+            className="inline-flex rounded-xl border bg-muted/30 p-1"
+          >
+            {[
+              { id: false, label: "No dev buy" },
+              { id: true, label: "Dev buy" },
+            ].map((tab) => (
+              <button
+                key={tab.label}
+                type="button"
+                role="tab"
+                aria-selected={devBuyOn === tab.id}
+                onClick={() => setDevBuyOn(tab.id)}
+                className={cn(
+                  "rounded-lg px-4 py-1.5 text-sm transition-colors",
+                  devBuyOn === tab.id
+                    ? "bg-card font-medium shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {devBuyOn ? (
+            <div className="space-y-4">
+              <Field label="Amount to spend" htmlFor="dev-buy">
+                <div className="flex items-center gap-2">
+                  <PrefixInput
+                    id="dev-buy"
+                    inputMode="decimal"
+                    value={devBuy}
+                    onChange={(e) => setDevBuy(e.target.value)}
+                    placeholder="0.02"
+                    suffix="ETH"
+                  />
+                  <Button
+                    type="button"
+                    variant="card"
+                    onClick={() => setDevBuy(ethLabel(maxDevBuyWei))}
+                  >
+                    Max
+                  </Button>
+                </div>
+              </Field>
+
+              <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                {[
+                  [
+                    "You would receive",
+                    devBuyWei > 0n
+                      ? `≈ ${formatTokens(Number(devBuyEstimate) / 1e18)}`
+                      : "—",
+                  ],
+                  [
+                    "Share of supply",
+                    devBuyWei > 0n ? `≈ ${devBuyShare.toFixed(2)}%` : "—",
+                  ],
+                  ["Most you may buy", `${ethLabel(maxDevBuyWei)} ETH`],
+                  ["Cap on that", `${CREATOR_BUY_MAX_PERCENT}% of supply`],
+                ].map(([label, value]) => (
+                  <div key={label} className="space-y-1">
+                    <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                      {label}
+                    </dt>
+                    <dd className="font-mono text-sm tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              {devBuyTooLarge && (
+                <p className="text-xs text-destructive">
+                  Over the cap. Above {ethLabel(maxDevBuyWei)} ETH the whole
+                  launch reverts, not just the buy — lower the amount.
+                </p>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                What this buys you is order, not exemption. Your tokens follow
+                the same schedule as everyone else&apos;s:{" "}
+                {rules.initialUnlock}% sellable immediately, all of it after{" "}
+                {formatDuration(rules.unlockHours)}. You pay the going price and
+                move it for the buyers behind you.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              The pool opens with the entire supply and no quote in it, so
+              launching costs you gas and nothing else. The first buyer sets the
+              first price — and it can be someone other than you.
+            </p>
+          )}
         </Section>
       </form>
 

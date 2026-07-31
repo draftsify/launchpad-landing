@@ -54,6 +54,32 @@ contract RevealToken is ERC20 {
     uint256 public constant MAX_METADATA_BYTES = 16_384;
 
     /**
+     * Ce que le créateur peut acheter dans la transaction de lancement, en bps
+     * de la supply. Cinq pour cent.
+     *
+     * Il faut dire exactement ce que ce chiffre concède, parce que c'est un
+     * privilège, et qu'un privilège tu par l'interface devient un piège pour
+     * qui ne le connaît pas : le créateur achète **avant tout le monde**, au
+     * prix d'ouverture, sans subir le délai anti-sniper. C'est un avantage réel
+     * et il est inscrit dans le code plutôt que vendu comme une neutralité.
+     *
+     * Ce qu'il ne concède pas, et c'est l'essentiel : rien sur la sortie. Les
+     * tokens ainsi achetés ouvrent une position ordinaire, avec le même
+     * déblocage initial et le même calendrier que ceux de n'importe quel
+     * acheteur. Le créateur ne peut pas vendre plus tôt, seulement acheter plus
+     * tôt.
+     *
+     * Le plafond est cumulé sur la fenêtre, et non par transaction : sans cela
+     * il suffirait de plusieurs transactions dans le même bloc pour le
+     * contourner entièrement.
+     *
+     * Repris de `RevealRules` plutôt que réécrit : le launcher l'annonce avant
+     * qu'un token existe, et un plafond qui diverge de celui qu'on affiche est
+     * pire que pas de plafond du tout.
+     */
+    uint16 public constant CREATOR_BUY_MAX_BPS = RevealRules.CREATOR_BUY_MAX_BPS;
+
+    /**
      * Part verrouillée d'un détenteur, sous forme d'une tranche unique.
      *
      * `lockedBasis` n'est pas ce que la position détient ni ce qu'elle a reçu :
@@ -88,6 +114,14 @@ contract RevealToken is ERC20 {
     address public pool;
     address public quote;
     /**
+     * Créateur du lancement, et seul bénéficiaire de la fenêtre d'achat
+     * initiale. Écrit une fois par le launcher, sans setter : il ne peut pas
+     * être transféré à une autre adresse après coup.
+     */
+    address public creator;
+    /// Ce que le créateur a déjà acheté dans la fenêtre. Cumulé, donc plafonné.
+    uint256 public creatorBought;
+    /**
      * Trésorerie du protocole. Elle reçoit les frais du pool, qui transitent
      * donc par un transfert pool → trésorerie. Ce transfert ressemble à un
      * achat sans en être un : il ne doit pas être soumis à la rampe anti-sniper,
@@ -110,6 +144,7 @@ contract RevealToken is ERC20 {
     error StringTooLong();
     error LaunchDelayActive(uint256 opensAt);
     error BuyTooLarge(uint256 maxBuy);
+    error CreatorBuyTooLarge(uint256 remaining);
     error PositionLocked(uint256 releasable);
 
     constructor(
@@ -138,13 +173,19 @@ contract RevealToken is ERC20 {
      * laisse le launcher poser la liquidité ; après, plus rien ne peut être
      * changé — il n'existe aucune autre fonction d'écriture sur la config.
      */
-    function initialize(address pool_, address quote_, address feeTreasury_) external {
+    function initialize(
+        address pool_,
+        address quote_,
+        address feeTreasury_,
+        address creator_
+    ) external {
         if (msg.sender != launcher) revert OnlyLauncher();
         if (pool != address(0)) revert AlreadyInitialized();
 
         pool = pool_;
         quote = quote_;
         feeTreasury = feeTreasury_;
+        creator = creator_;
         tokenIsToken0 = IUniswapV3Pool(pool_).token0() == address(this);
         launchedAt = uint64(block.timestamp);
     }
@@ -277,6 +318,16 @@ contract RevealToken is ERC20 {
     }
 
     /**
+     * Ce qu'il reste au créateur sur sa fenêtre d'achat, en tokens. Zéro dès le
+     * bloc suivant : la fenêtre ne se rouvre pas.
+     */
+    function creatorBuyRemaining() public view returns (uint256) {
+        if (pool == address(0) || block.timestamp != launchedAt) return 0;
+        uint256 cap = (totalSupply() * CREATOR_BUY_MAX_BPS) / BPS;
+        return cap > creatorBought ? cap - creatorBought : 0;
+    }
+
+    /**
      * Le plus gros achat que les règles laissent passer à cet instant, en tokens.
      *
      * Le pendant de `releasable` du côté des achats. Sans lui, un achat trop gros
@@ -310,7 +361,7 @@ contract RevealToken is ERC20 {
             // Les frais versés à la trésorerie ne subissent pas la rampe — la
             // collecte est permissionless et ne doit pas dépendre de l'heure —
             // mais ils ouvrent bien une position.
-            if (to != feeTreasury) _guardBuy(value);
+            if (to != feeTreasury) _guardBuy(to, value);
             _recordBuy(to, value);
         } else {
             /**
@@ -335,8 +386,28 @@ contract RevealToken is ERC20 {
         if (from != pool && balanceOf(from) == 0) delete positions[from];
     }
 
-    function _guardBuy(uint256 value) private view {
+    function _guardBuy(address to, uint256 value) private {
         uint256 sinceLaunch = block.timestamp - launchedAt;
+
+        /**
+         * La fenêtre d'achat du créateur : le bloc du lancement, et lui seul.
+         *
+         * Bornée au bloc plutôt qu'à la transaction, parce qu'un contrat ne
+         * peut pas distinguer les deux — et cumulée, parce que sinon plusieurs
+         * transactions dans ce même bloc rendraient le plafond décoratif.
+         *
+         * Elle ne dispense que du délai. Tout le reste s'applique : la position
+         * ouverte est ordinaire, et `_recordBuy` la verrouille comme les autres
+         * juste après.
+         */
+        if (to == creator && sinceLaunch == 0) {
+            uint256 cap = (totalSupply() * CREATOR_BUY_MAX_BPS) / BPS;
+            uint256 bought = creatorBought + value;
+            if (bought > cap) revert CreatorBuyTooLarge(cap - creatorBought);
+            creatorBought = bought;
+            return;
+        }
+
         if (sinceLaunch < rules.launchDelay) {
             revert LaunchDelayActive(launchedAt + rules.launchDelay);
         }

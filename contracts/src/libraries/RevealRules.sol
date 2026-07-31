@@ -42,6 +42,16 @@ library RevealRules {
     uint256 internal constant RAMP_START_BPS = 25;
 
     /**
+     * Ce que le créateur peut acheter dans la transaction de lancement, en bps
+     * de la supply. Cinq pour cent.
+     *
+     * Ici, et pas dans le token, parce que le launcher doit pouvoir l'annoncer
+     * avant qu'un token existe. Deux copies d'un même plafond finiraient par
+     * diverger, et celle qui compte serait la moins visible.
+     */
+    uint16 internal constant CREATOR_BUY_MAX_BPS = 500;
+
+    /**
      * Plafond du déblocage initial. Au-delà, la mécanique serait inerte — et
      * c'est aussi ce qui garantit que `BPS - initialUnlockBps` ne s'annule
      * jamais, dénominateur dont dépend tout le calcul de la part verrouillée.
@@ -55,8 +65,16 @@ library RevealRules {
 
     function validate(Rules memory r) internal pure {
         if (r.initialUnlockBps > MAX_INITIAL_UNLOCK_BPS) revert InitialUnlockTooHigh();
-        // Bornes hautes : au-delà, le token serait durablement invendable.
-        if (r.unlockSeconds < 1 hours || r.unlockSeconds > 7 days) {
+        /**
+         * Borne haute : au-delà, le token serait durablement invendable.
+         *
+         * Borne basse à un quart d'heure, et pas moins. Le déblocage se mesure
+         * contre un TWAP de cinq minutes : sous ce seuil, la fenêtre du relief
+         * représenterait le tiers de la vie de la contrainte, et la contrainte
+         * n'en serait plus une. Un quart d'heure laisse trois fenêtres — assez
+         * pour qu'une baisse réelle se lise avant que le temps ait tout ouvert.
+         */
+        if (r.unlockSeconds < 15 minutes || r.unlockSeconds > 7 days) {
             revert UnlockWindowOutOfRange();
         }
         if (r.launchDelay > 1 hours) revert LaunchDelayTooLong();

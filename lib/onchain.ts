@@ -161,6 +161,22 @@ export async function readRules(): Promise<Rules | null> {
   };
 }
 
+/**
+ * Le plafond d'achat du créateur, en wei de token, lu sur le launcher.
+ *
+ * Lisible avant qu'un token existe — c'est tout l'intérêt : le formulaire doit
+ * pouvoir borner le champ pendant qu'on le remplit, pas sur un échec de
+ * signature.
+ */
+export async function readCreatorBuyCap(): Promise<bigint | null> {
+  if (!isDeployed) return null;
+  return publicClient.readContract({
+    address: LAUNCHER_ADDRESS as `0x${string}`,
+    abi: launcherAbi,
+    functionName: "creatorBuyCap",
+  });
+}
+
 export async function readLaunchBySlug(slug: string): Promise<Launch | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(slug)) return null;
   // Masqué de la liste veut dire masqué de son adresse directe : sinon un lien
