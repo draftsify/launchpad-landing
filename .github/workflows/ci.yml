@@ -34,6 +34,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # L'assainissement des métadonnées : ce que le site accepte d'afficher
+      # quand le document vient d'un inconnu. Sans dépendance de test — Node
+      # exécute le TypeScript en retirant les types.
+      - name: Library tests
+        run: npm run test:lib
+
       - name: Build
         run: npm run build
 

@@ -1,0 +1,101 @@
+/**
+ * Assainissement des métadonnées, éprouvé sur ce qu'un inconnu peut écrire.
+ *
+ * Ces cas ne sont pas décoratifs : `metadataURI` est un argument de `launch`,
+ * donc son contenu n'est pas produit par notre formulaire mais par qui lance le
+ * token. Chacun de ces tests correspond à une chose que le site affichait, ou
+ * chargeait, avant que `sanitize` existe.
+ *
+ * Lancé par `npm run test:lib`, sans dépendance : Node exécute le TypeScript en
+ * retirant les types.
+ */
+import { parseMetadata, toDataUri } from "./metadata.ts";
+
+const enc = (o: unknown) =>
+  "data:application/json;base64," + Buffer.from(JSON.stringify(o)).toString("base64");
+
+let pass = 0;
+let fail = 0;
+const check = (label: string, ok: boolean, detail = "") => {
+  if (ok) pass++;
+  else fail++;
+  console.log(`${ok ? "  ok    " : "  ECHEC "} ${label}${detail ? "  -> " + detail : ""}`);
+};
+
+const png = "data:image/png;base64,iVBORw0KGgo=";
+const base = { name: "a", symbol: "A" };
+
+console.log("--- images ---");
+check(
+  "image distante rejetee",
+  parseMetadata(enc({ ...base, image: "https://tracker.example/p.png" }))?.image === undefined
+);
+check("image data: acceptee", parseMetadata(enc({ ...base, image: png }))?.image === png);
+check(
+  "svg rejete",
+  parseMetadata(enc({ ...base, image: "data:image/svg+xml;base64,PHN2Zz4=" }))?.image === undefined
+);
+check(
+  "data: non-image rejete",
+  parseMetadata(enc({ ...base, image: "data:text/html;base64,PGI+" }))?.image === undefined
+);
+check(
+  "base64 malforme rejete",
+  parseMetadata(enc({ ...base, image: "data:image/png;base64,<script>" }))?.image === undefined
+);
+
+console.log("--- textes ---");
+check(
+  "description trop longue ignoree",
+  parseMetadata(enc({ ...base, description: "x".repeat(1001) }))?.description === undefined
+);
+check(
+  "description normale gardee",
+  parseMetadata(enc({ ...base, description: "Accents: éàü" }))?.description ===
+    "Accents: éàü"
+);
+check(
+  "caractere de controle rejete",
+  parseMetadata(enc({ ...base, description: "avantapres" }))?.description === undefined
+);
+check(
+  "marque bidi rejetee",
+  parseMetadata(enc({ ...base, description: "REVEAL‮gnitekaf" }))?.description === undefined
+);
+
+console.log("--- liens ---");
+check(
+  "javascript: rejete",
+  parseMetadata(enc({ ...base, website: "javascript:alert(1)" }))?.website === undefined
+);
+check("domaine accepte", parseMetadata(enc({ ...base, website: "reveal.xyz" }))?.website === "reveal.xyz");
+check(
+  "https retire du domaine",
+  parseMetadata(enc({ ...base, website: "https://reveal.xyz/docs" }))?.website === "reveal.xyz/docs"
+);
+check("pseudo x accepte", parseMetadata(enc({ ...base, x: "launchonreveal" }))?.x === "launchonreveal");
+
+console.log("--- documents casses ---");
+check("json invalide -> null", parseMetadata("data:application/json;base64,####") === null);
+check("uri non json -> null", parseMetadata("https://example.com/meta.json") === null);
+check("tableau -> null", parseMetadata(enc([1, 2, 3])) === null);
+
+console.log("--- aller-retour ---");
+const round = toDataUri({
+  name: "Reveal",
+  symbol: "RVL",
+  description: "éàü 中文",
+  image: png,
+  website: "reveal.xyz",
+});
+const back = parseMetadata(round);
+check(
+  "toDataUri -> parseMetadata conserve tout",
+  back?.description === "éàü 中文" &&
+    back?.image === png &&
+    back?.website === "reveal.xyz",
+  JSON.stringify(back)
+);
+
+console.log(`\n${pass} ok, ${fail} echec(s)`);
+process.exit(fail ? 1 : 0);

@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "logo": "node scripts/process-logo.mjs",
-    "logos": "node scripts/logos.mjs"
+    "logos": "node scripts/logos.mjs",
+    "test:lib": "node --experimental-strip-types lib/metadata.test.mts",
+    "test:e2e-image": "node --experimental-strip-types scripts/e2e-image.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

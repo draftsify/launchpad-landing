@@ -12,6 +12,11 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Les tests et scripts en .mts sont exécutés par Node, qui exige
+    // l'extension dans l'import — alors que tsc la refuse par défaut. Sans code
+    // émis, la permettre ne change rien à ce que le bundler produit : les
+    // fichiers du site importent toujours sans extension, comme avant.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

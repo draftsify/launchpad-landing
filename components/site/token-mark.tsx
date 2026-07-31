@@ -16,6 +16,12 @@ const SIZES = {
  * L'image vient du `metadataURI`, donc d'un data URI écrit dans le contrat.
  * `unoptimized` est nécessaire : l'optimiseur de Next attend une URL qu'il peut
  * aller chercher, et il n'y a rien à aller chercher ici.
+ *
+ * `object-contain` et non `object-cover`. Ce que notre formulaire écrit est
+ * désormais carré, donc les deux reviennent au même pour un lancement fait
+ * ici ; la différence porte sur les documents écrits en appelant le contrat
+ * directement, qui n'ont aucune raison d'être carrés. `cover` couperait les
+ * deux bouts d'un logo en bandeau — c'est-à-dire le nom.
  */
 export function TokenMark({
   symbol,
@@ -45,7 +51,7 @@ export function TokenMark({
           width={128}
           height={128}
           unoptimized
-          className="size-full select-none object-cover"
+          className="size-full select-none object-contain"
         />
       ) : (
         <span
