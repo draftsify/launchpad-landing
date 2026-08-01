@@ -8,7 +8,6 @@ import { ArrowUpRight, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProtocolMenu } from "@/components/site/protocol-menu";
 import { NavSearch } from "@/components/site/nav-search";
-import { TreasuryFees } from "@/components/site/treasury-fees";
 import { WalletDialog } from "@/components/site/wallet-dialog";
 import { useWallet } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
@@ -89,10 +88,8 @@ export function Header() {
       </div>
 
       <div className="hidden items-center gap-2 md:flex">
-        {/* Avant le wallet : la collecte se lit comme une action de compte, pas
-            comme une action de page. Le composant ne rend rien pour qui n'est
-            pas la tresorerie. */}
-        <TreasuryFees />
+        {/* La collecte a rejoint la modale du wallet : c'est une action de
+            compte, et elle se cherche là où l'on regarde son compte. */}
         <WalletDialog>
           {account ? (
             // Connecté : l'icône suffit, l'adresse est déjà lisible dans

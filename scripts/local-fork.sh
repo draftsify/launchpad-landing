@@ -84,7 +84,12 @@ done
 echo "  soldes et allowances WETH en cache pour 6 comptes et 4 contrats"
 
 step "Déploiement du protocole"
+# La trésorerie est exigée par le script de déploiement, et volontairement :
+# elle est gravée dans le constructeur. Ici c'est le compte anvil 6, distinct du
+# lanceur, pour que le partage des frais se voie — un côté à l'un, l'autre à
+# l'autre, sur deux adresses qu'on peut regarder séparément.
 pushd contracts >/dev/null
+TREASURY="${TREASURY:-0x976EA74026E726554dB657fA54763abd0C3a0aa9}" \
 forge script script/Deploy.s.sol:Deploy --rpc-url $R --broadcast --unlocked \
   --sender $A0 >/dev/null 2>&1
 LAUNCHER=$(node -e "
@@ -93,10 +98,11 @@ LAUNCHER=$(node -e "
   process.stdout.write(t.contractAddress);
 ")
 popd >/dev/null
-FEES=$(cast call "$LAUNCHER" 'fees()(address)' --rpc-url $R)
+LOCKER=$(cast call "$LAUNCHER" 'locker()(address)' --rpc-url $R)
 echo "  RevealLauncher $LAUNCHER"
-echo "  RevealFees     $FEES"
-echo "  treasury       $(cast call "$FEES" 'treasury()(address)' --rpc-url $R)"
+echo "  RevealLocker   $LOCKER"
+echo "  treasury       $(cast call "$LOCKER" 'treasury()(address)' --rpc-url $R)"
+echo "  frais partagés $(cast call "$LOCKER" 'SPLITS_FEES()(bool)' --rpc-url $R)"
 
 step "Un token, lancé"
 cast send "$LAUNCHER" 'launch(string,string,string)' \

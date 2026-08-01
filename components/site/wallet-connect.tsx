@@ -9,7 +9,6 @@ import {
   WalletLogo,
   type WalletSlug,
 } from "@/components/site/wallet-dialog";
-import { useWallet, shortenAddress } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
 
 /** Damier volontairement irrégulier, comme sur la maquette. */
@@ -31,8 +30,6 @@ const TILES: { row: number; col: number; slug?: WalletSlug }[] = [
 const CELL = 64;
 
 export function WalletConnect() {
-  const { account } = useWallet();
-
   return (
     <section className="relative px-4 py-14 sm:py-20">
       <FullWidthDivider className="-top-px" />
@@ -48,22 +45,16 @@ export function WalletConnect() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
+            {/* Un appel à l'action, pas un indicateur d'état : l'adresse et le
+                point « connecté » vivent dans l'en-tête, où ils restent
+                visibles sur toutes les pages. Les répéter ici transformait une
+                invitation en redite. */}
             <WalletDialog>
               <Button size="lg">
                 <Wallet />
-                {account ? shortenAddress(account) : "Connect wallet"}
+                Connect your wallet
               </Button>
             </WalletDialog>
-
-            {account && (
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-full bg-foreground"
-                />
-                Connected
-              </span>
-            )}
           </div>
         </div>
 

@@ -1,18 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Coins, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { encodeFunctionData, formatEther } from "viem";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { useWallet } from "@/components/site/wallet-provider";
 import {
   activeChain,
@@ -49,11 +41,16 @@ function eth(wei: bigint, decimals = 4) {
 }
 
 /**
- * Collecte des frais, à côté du wallet.
+ * Collecte des frais, dans la modale du wallet.
+ *
+ * Elle y est plutôt qu'à côté parce qu'une récompense se cherche là où l'on
+ * regarde son compte. Un bouton séparé n'apparaissait qu'aux ayants droit,
+ * donc personne ne savait qu'il pouvait exister : le créateur qui vient voir
+ * son adresse trouve maintenant sa part sur le même écran.
  *
  * Deux publics depuis que le locker partage par côté : la trésorerie, qui reçoit
  * la quote, et les créateurs, qui reçoivent les tokens de leurs lancements. Le
- * bouton n'apparaît que pour eux — `collect` reste appelable par n'importe qui,
+ * panneau n'apparaît que pour eux — `collect` reste appelable par n'importe qui,
  * mais proposer « réclamer » à un visiteur laisserait croire qu'une part lui
  * revient.
  *
@@ -66,13 +63,12 @@ function eth(wei: bigint, decimals = 4) {
  * position, donc la vue rend zéro tant que personne n'a collecté, quel qu'ait
  * été le volume.
  */
-export function TreasuryFees() {
+export function FeesPanel() {
   const { account, onCorrectChain, switchChain } = useWallet();
   const [treasury, setTreasury] = useState<`0x${string}` | null>(null);
   const [rows, setRows] = useState<Claimable[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; hash?: string } | null>(null);
-  const [open, setOpen] = useState(false);
   /** WETH détenu par le wallet connecté, s'il y en a. */
   const [wrapped, setWrapped] = useState<{ token: `0x${string}`; balance: bigint } | null>(
     null
@@ -370,189 +366,196 @@ export function TreasuryFees() {
     return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="card" size="sm" onClick={refresh}>
-          <Coins />
-          {rows === null || !isTreasury ? "Fees" : `${eth(pending)} ETH`}
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Protocol fees</DialogTitle>
-          <DialogDescription>
-            {splits ? (
+    <div className="mt-4 space-y-3 border-t pt-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">
+          {isTreasury ? "Protocol fees" : "Creator rewards"}
+          {isTreasury && rows !== null && (
+            <span className="ml-2 font-mono text-xs text-muted-foreground tabular-nums">
+              {eth(pending)} ETH
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {splits ? (
+            isTreasury ? (
               <>
                 Swap fees accrued to each locked position. Uniswap charges on
                 whichever side goes in, so buys pay in ETH and sells pay in the
-                token — the quote goes to the treasury, the tokens to whoever
-                launched it. Collecting is permissionless: one transaction pays
-                both, whoever sends it.
+                token — the quote comes here, the tokens go to whoever launched
+                it. Collecting is permissionless: one transaction pays both,
+                whoever sends it.
               </>
             ) : (
               <>
-                Swap fees accrued to each locked position. Collecting always
-                pays the treasury written into the locker&apos;s constructor,
-                never the caller — this button only triggers it, and so could
-                anyone.
+                Every sell in your pool pays a fee in your token, and that side
+                is yours. Claiming also pays the treasury its ETH side in the
+                same transaction — the two are collected together, and cannot be
+                separated.
               </>
-            )}
-            {treasury && (
-              <>
-                {" "}
-                Treasury:{" "}
-                <span className="font-mono text-[11px] break-all">
-                  {treasury}
-                </span>
-                {isTreasury ? " — the wallet you are connected with." : "."}
-              </>
-            )}
-          </DialogDescription>
-        </DialogHeader>
+            )
+          ) : (
+            <>
+              Swap fees accrued to each locked position. Collecting always pays
+              the treasury written into the locker&apos;s constructor, never the
+              caller — this only triggers it, and so could anyone.
+            </>
+          )}
+          {treasury && isTreasury && (
+            <>
+              {" "}
+              Treasury:{" "}
+              <span className="font-mono text-[11px] break-all">
+                {treasury}
+              </span>{" "}
+              — the wallet you are connected with.
+            </>
+          )}
+        </p>
+      </div>
 
-        {rows === null ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Reading {activeChain.name}…
-          </div>
-        ) : withFees.length === 0 ? (
-          <p className="py-6 text-sm text-muted-foreground">
-            Nothing to collect yet. Fees appear here as soon as a pool is traded.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {withFees.map((row) => (
-              <li
-                key={row.address}
+      {rows === null ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Reading {activeChain.name}…
+        </div>
+      ) : withFees.length === 0 ? (
+        <p className="py-2 text-sm text-muted-foreground">
+          Nothing to collect yet. Fees appear here as soon as a pool is traded.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {withFees.map((row) => (
+            <li
+              key={row.address}
+              className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
+            >
+              <div className="min-w-0 space-y-0.5">
+                <p className="truncate text-sm font-medium">
+                  {row.name}{" "}
+                  <span className="text-muted-foreground">{row.symbol}</span>
+                </p>
+                <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                  {eth(row.quote, 6)} ETH → treasury
+                </p>
+                {row.token > 0n && (
+                  <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                    {formatTokens(Number(row.token) / 1e18)} {row.symbol} →{" "}
+                    {splits
+                      ? account &&
+                        row.creator.toLowerCase() === account.toLowerCase()
+                        ? "you"
+                        : "creator"
+                      : "treasury"}
+                  </p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                disabled={busy !== null}
+                onClick={() => collect(row.address)}
+              >
+                {busy === row.address ? (
+                  <Loader2 className="animate-spin" />
+                ) : isTreasury ? (
+                  "Collect"
+                ) : (
+                  "Claim"
+                )}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {note && (
+        <p className="text-xs text-muted-foreground">
+          {note.text}{" "}
+          {note.hash && explorerTx(note.hash) && (
+            <a
+              href={explorerTx(note.hash)}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Transaction
+            </a>
+          )}
+        </p>
+      )}
+
+      {holdings.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium">Fee tokens held</p>
+          {holdings.map((holding) => {
+            const locked = holding.balance - holding.releasable;
+            return (
+              <div
+                key={holding.address}
                 className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
               >
                 <div className="min-w-0 space-y-0.5">
                   <p className="truncate text-sm font-medium">
-                    {row.name}{" "}
-                    <span className="text-muted-foreground">{row.symbol}</span>
+                    {formatTokens(Number(holding.balance) / 1e18)}{" "}
+                    <span className="text-muted-foreground">
+                      {holding.symbol}
+                    </span>
                   </p>
-                  <p className="font-mono text-xs text-muted-foreground tabular-nums">
-                    {eth(row.quote, 6)} ETH → treasury
+                  <p className="text-xs text-muted-foreground">
+                    {locked > 0n
+                      ? `${formatTokens(Number(holding.releasable) / 1e18)} sellable now — the rest opens within fifteen minutes of the collection.`
+                      : "Fully unlocked."}
                   </p>
-                  {row.token > 0n && (
-                    <p className="font-mono text-xs text-muted-foreground tabular-nums">
-                      {formatTokens(Number(row.token) / 1e18)} {row.symbol} →{" "}
-                      {splits
-                        ? account &&
-                          row.creator.toLowerCase() === account.toLowerCase()
-                          ? "you"
-                          : "creator"
-                        : "treasury"}
-                    </p>
-                  )}
                 </div>
                 <Button
                   size="sm"
-                  disabled={busy !== null}
-                  onClick={() => collect(row.address)}
+                  variant="card"
+                  disabled={busy !== null || holding.releasable === 0n}
+                  onClick={() => sellToEth(holding)}
                 >
-                  {busy === row.address ? (
+                  {busy === `sell:${holding.address}` ? (
                     <Loader2 className="animate-spin" />
-                  ) : isTreasury ? (
-                    "Collect"
                   ) : (
-                    "Claim"
+                    "Sell to ETH"
                   )}
                 </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {note && (
-          <p className="text-xs text-muted-foreground">
-            {note.text}{" "}
-            {note.hash && explorerTx(note.hash) && (
-              <a
-                href={explorerTx(note.hash)}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-2 hover:text-foreground"
-              >
-                Transaction
-              </a>
-            )}
-          </p>
-        )}
-
-        {holdings.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium">Fee tokens held</p>
-            {holdings.map((holding) => {
-              const locked = holding.balance - holding.releasable;
-              return (
-                <div
-                  key={holding.address}
-                  className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
-                >
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="truncate text-sm font-medium">
-                      {formatTokens(Number(holding.balance) / 1e18)}{" "}
-                      <span className="text-muted-foreground">{holding.symbol}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {locked > 0n
-                        ? `${formatTokens(Number(holding.releasable) / 1e18)} sellable now — the rest opens within fifteen minutes of the collection.`
-                        : "Fully unlocked."}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="card"
-                    disabled={busy !== null || holding.releasable === 0n}
-                    onClick={() => sellToEth(holding)}
-                  >
-                    {busy === `sell:${holding.address}` ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      "Sell to ETH"
-                    )}
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {wrapped && wrapped.balance > 0n && (
-          <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <p className="text-sm font-medium">
-                  {eth(wrapped.balance, 6)} WETH in this wallet
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Wrapped ETH is an ERC-20, so a wallet only shows it once the
-                  token is added. This is where a collection lands.
-                </p>
               </div>
-              <Button size="sm" disabled={busy !== null} onClick={unwrap}>
-                {busy === "unwrap" ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  "Unwrap"
-                )}
-              </Button>
-            </div>
-            <p className="font-mono text-[11px] break-all text-muted-foreground">
-              {wrapped.token}
-            </p>
-          </div>
-        )}
+            );
+          })}
+        </div>
+      )}
 
-        <p className="text-xs text-muted-foreground">
-          Fees are paid in both sides of the pair, so a collection returns
-          wrapped ETH and tokens. The tokens land as an ordinary position — the
-          protocol is subject to its own unlock schedule, a tenth at once and
-          all of it fifteen minutes later.
-        </p>
-      </DialogContent>
-    </Dialog>
+      {wrapped && wrapped.balance > 0n && (
+        <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">
+                {eth(wrapped.balance, 6)} WETH in this wallet
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Wrapped ETH is an ERC-20, so a wallet only shows it once the
+                token is added. This is where a collection lands.
+              </p>
+            </div>
+            <Button size="sm" disabled={busy !== null} onClick={unwrap}>
+              {busy === "unwrap" ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                "Unwrap"
+              )}
+            </Button>
+          </div>
+          <p className="font-mono text-[11px] break-all text-muted-foreground">
+            {wrapped.token}
+          </p>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        {isTreasury
+          ? "Fees are paid in both sides of the pair, so a collection returns wrapped ETH and tokens. The tokens land as an ordinary position — the protocol is subject to its own unlock schedule, a tenth at once and all of it fifteen minutes later."
+          : "Your tokens land as an ordinary position, under the same unlock schedule as everyone else: a tenth sellable at once, all of it fifteen minutes later. Nobody is exempt from the rule, not even the person who wrote it."}
+      </p>
+    </div>
   );
 }

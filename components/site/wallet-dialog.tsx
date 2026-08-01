@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { FeesPanel } from "@/components/site/treasury-fees";
 import { LOGO_RATIOS } from "@/lib/logo-ratios";
 import { useWallet, shortenAddress } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
@@ -70,7 +71,9 @@ export function WalletDialog({ children }: { children: React.ReactNode }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
-      <DialogContent>
+      {/* Les frais peuvent tenir plusieurs lancements : la modale défile plutôt
+          que de déborder de l'écran. */}
+      <DialogContent className="scrollbar-slim max-h-[85vh] overflow-y-auto">
         {account ? (
           <>
             <DialogHeader>
@@ -88,6 +91,11 @@ export function WalletDialog({ children }: { children: React.ReactNode }) {
                 {shortenAddress(account)}
               </span>
             </div>
+
+            {/* Ce qui revient à cette adresse, sous l'adresse elle-même. Le
+                panneau ne rend rien si rien n'est dû, donc la modale reste
+                celle qu'elle était pour la plupart des gens. */}
+            <FeesPanel />
 
             <Button
               variant="card"
