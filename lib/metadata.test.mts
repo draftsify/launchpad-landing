@@ -104,6 +104,31 @@ check(
   "url telegram ramenee au pseudo",
   parseMetadata(enc({ ...base, telegram: "https://t.me/revealchat" }))?.telegram === "revealchat"
 );
+// Le cas qui a fait disparaitre le lien X d'un vrai lancement : l'URL copiee
+// depuis l'application porte la langue en parametre.
+check(
+  "parametre de langue retire du pseudo",
+  parseMetadata(enc({ ...base, x: "https://x.com/whatthedoogdoin?lang=fr" }))?.x ===
+    "whatthedoogdoin"
+);
+check(
+  "barre finale retiree",
+  parseMetadata(enc({ ...base, x: "https://x.com/launchonreveal/" }))?.x === "launchonreveal"
+);
+check(
+  "www retire",
+  parseMetadata(enc({ ...base, telegram: "https://www.t.me/revealchat" }))?.telegram ===
+    "revealchat"
+);
+check(
+  "ancre retiree",
+  parseMetadata(enc({ ...base, x: "x.com/launchonreveal#top" }))?.x === "launchonreveal"
+);
+// Ce qui reste refuse : un chemin n'est pas un pseudo.
+check(
+  "chemin profond toujours refuse",
+  parseMetadata(enc({ ...base, x: "x.com/launchonreveal/status/1" }))?.x === undefined
+);
 
 console.log("--- ipfs ---");
 const cid = "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";

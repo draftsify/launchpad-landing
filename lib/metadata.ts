@@ -293,17 +293,60 @@ function url(value: unknown) {
  * `x.com/https://x.com/moncompte`. On retire donc l'hôte connu, et ce qui reste
  * doit être un pseudo — pas un chemin, pas une recherche.
  */
+const RESERVED = new Set([
+  "search",
+  "home",
+  "explore",
+  "notifications",
+  "messages",
+  "i",
+  "intent",
+  "share",
+  "hashtag",
+  "settings",
+  "login",
+  "signup",
+  "joinchat",
+  "s",
+]);
+
 function pseudo(value: unknown, hosts: readonly string[]) {
   const raw = text(value, MAX_HANDLE_CHARS);
   if (!raw) return undefined;
 
-  let handle = raw.replace(/^https?:\/\//i, "").replace(/^@/, "");
+  let handle = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/^@/, "");
   for (const host of hosts) {
     if (handle.toLowerCase().startsWith(`${host}/`)) {
       handle = handle.slice(host.length + 1);
       break;
     }
   }
+
+  /**
+   * Ce qui suit le pseudo est retiré, pas rejeté.
+   *
+   * Un lien copié depuis un navigateur traîne presque toujours quelque chose :
+   * `x.com/moncompte?lang=fr` en sortant de l'application, une barre finale en
+   * sortant de la barre d'adresse. La règle précédente exigeait un pseudo nu et
+   * jetait tout le reste **en silence** — vu sur un vrai lancement, dont le lien
+   * X n'est jamais apparu alors que le créateur l'avait rempli.
+   *
+   * Le contraire du champ `website`, où la chaîne de requête fait partie de
+   * l'adresse et doit être gardée. Ici elle n'en fait pas partie : un pseudo ne
+   * contient ni `?` ni `#` ni `/`.
+   */
+  handle = handle.split(/[?#]/)[0].replace(/\/+$/, "");
+
+  /**
+   * Ce qui a la forme d'un pseudo sans en être un.
+   *
+   * Retirer la chaîne de requête transforme `x.com/search?q=leafcat` en
+   * `search`, qui passe la validation et afficherait `@search`. Ces mots sont
+   * réservés par les plateformes et ne peuvent appartenir à personne : les
+   * écarter coûte une liste courte et évite d'afficher un lien qui ne mène pas
+   * où le créateur croyait.
+   */
+  if (RESERVED.has(handle.toLowerCase())) return undefined;
 
   return /^[A-Za-z0-9_.-]{1,64}$/.test(handle) ? handle : undefined;
 }
