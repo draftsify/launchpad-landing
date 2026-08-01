@@ -9,8 +9,8 @@
  * serait mentir aux gens qui détiennent ce token.
  *
  * La liste est donc versionnée, en clair, avec un motif par entrée : une
- * décision qu'on assume s'écrit là où elle se vérifie. Elle reste volontairement
- * étroite — l'usurpation d'identité du launchpad lui-même, rien d'autre. Un
+ * décision qu'on assume s'écrit là où elle se vérifie. Deux motifs seulement y
+ * figurent — l'usurpation d'identité du launchpad, et nos propres essais. Un
  * launchpad qui filtre selon ses goûts a cessé d'être neutre, et sa promesse de
  * découverte des prix avec.
  */
@@ -23,6 +23,31 @@ export const HIDDEN: { address: string; reason: string }[] = [
     reason:
       "It launched under the launchpad's own name and symbol, from an address unconnected to the project.",
   },
+
+  /**
+   * Nos essais, retirés de la vitrine mais pas de la chaîne.
+   *
+   * Ils ont servi à vérifier le partage des frais, l'épinglage IPFS et la carte
+   * de partage. Les laisser en tête d'une liste vide donnerait à croire à une
+   * activité qui n'existe pas — et deux Hedgehog suivis de trois SuitDog se
+   * lisent comme un launchpad cassé plutôt que comme un launchpad neuf.
+   *
+   * Ce que ce retrait ne fait pas : rien sur la chaîne. Les pools tournent, les
+   * pages de ces tokens continuent de répondre, et qui en détient peut vendre
+   * exactement comme avant. Le dire ici plutôt que de laisser croire à une
+   * suppression.
+   */
+  ...[
+    "0x51fE0e64c370B7466a14E3cC397e2344842CBCF2",
+    "0xAd8038B252D471e2646713EdBed148694ec5E51f",
+    "0x5d4CDEFCDA9e9c48FaaB59A1bfe9ad28185077b7",
+    "0x52418637B35b6c10402920973382e7551A99d71b",
+    "0xA2876fc78a191F7592B2200CD528e84fDc4F50d9",
+  ].map((address) => ({
+    address,
+    reason:
+      "A test launch by the team, kept off the list until launches open properly.",
+  })),
 ];
 
 /**
