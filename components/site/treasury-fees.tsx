@@ -63,7 +63,18 @@ function eth(wei: bigint, decimals = 4) {
  * position, donc la vue rend zéro tant que personne n'a collecté, quel qu'ait
  * été le volume.
  */
-export function FeesPanel() {
+export function FeesPanel({
+  /**
+   * Rendu hors de la modale du wallet, sur une page qui n'existe que pour ça.
+   *
+   * Deux différences, et une seule compte : le panneau reste affiché quand il
+   * n'y a rien à collecter. Dans la modale, s'effacer est juste ; sur une page
+   * ouverte exprès, disparaître se lit comme une panne.
+   */
+  standalone = false,
+}: {
+  standalone?: boolean;
+} = {}) {
   const { account, onCorrectChain, switchChain } = useWallet();
   const [treasury, setTreasury] = useState<`0x${string}` | null>(null);
   const [rows, setRows] = useState<Claimable[] | null>(null);
@@ -352,7 +363,7 @@ export function FeesPanel() {
     ) ?? [];
   const isCreator = mine.length > 0;
 
-  if (!isDeployed || (!isTreasury && !isCreator)) return null;
+  if (!isDeployed || (!isTreasury && !isCreator && !standalone)) return null;
 
   // La trésorerie voit tous les lancements ; un créateur ne voit que les siens.
   const visible = isTreasury ? (rows ?? []) : mine;
@@ -362,11 +373,17 @@ export function FeesPanel() {
   // compte, sinon le bouton disparaîtrait juste après une collecte réussie —
   // au moment précis où il faut pouvoir en faire quelque chose.
   const hasWrapped = (wrapped?.balance ?? 0n) > 0n;
-  if (rows !== null && withFees.length === 0 && !hasWrapped && holdings.length === 0)
+  if (
+    !standalone &&
+    rows !== null &&
+    withFees.length === 0 &&
+    !hasWrapped &&
+    holdings.length === 0
+  )
     return null;
 
   return (
-    <div className="mt-4 space-y-3 border-t pt-4">
+    <div className={standalone ? "space-y-3" : "mt-4 space-y-3 border-t pt-4"}>
       <div className="space-y-1">
         <p className="text-sm font-medium">
           {isTreasury ? "Protocol fees" : "Creator rewards"}
