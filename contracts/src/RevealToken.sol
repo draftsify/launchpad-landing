@@ -111,6 +111,31 @@ contract RevealToken is ERC20 {
      */
     string public metadataURI;
 
+    /**
+     * Le même document, sous le nom que le reste du monde interroge — ERC-1046.
+     *
+     * Pourquoi ce doublon. `metadataURI` est un nom que nous avons inventé :
+     * aucun indexeur, aucun portefeuille, aucun explorateur ne va l'appeler,
+     * parce que rien ne leur dit qu'il existe. Mesuré sur les terminaux où ces
+     * lancements circulent, l'image reste une pastille grise alors qu'elle est
+     * écrite dans le contrat, à quelques octets de là.
+     *
+     * ERC-1046 définit `tokenURI()` sur un ERC-20 comme le pointeur vers un
+     * document JSON portant `name`, `symbol`, `decimals`, `description` et
+     * `image`. C'est exactement ce que nous écrivons déjà. Exposer le même
+     * contenu sous le nom standard ne coûte rien à l'exécution — la fonction ne
+     * fait que relire le même emplacement — et rend le logo trouvable par qui
+     * suit la norme plutôt que par qui nous connaît.
+     *
+     * Ce qu'elle rend est un data URI, pas une adresse HTTP, et c'est délibéré :
+     * une URL grave un nom de domaine dans un contrat immuable, donc parie que
+     * ce domaine vivra aussi longtemps que la chaîne. Le document se lit ici
+     * sans dépendre de personne.
+     */
+    function tokenURI() external view returns (string memory) {
+        return metadataURI;
+    }
+
     address public pool;
     address public quote;
     /**

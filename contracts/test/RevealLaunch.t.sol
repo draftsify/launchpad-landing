@@ -173,4 +173,26 @@ contract RevealLaunchTest is RevealBase {
         vm.expectRevert(RevealToken.StringTooLong.selector);
         launcher.launch("Reveal", "REVEAL", tooLong);
     }
+
+    /**
+     * Le nom standard rend le même document que le nôtre — ERC-1046.
+     *
+     * L'égalité est ce qui compte : deux accesseurs qui divergeraient feraient
+     * afficher deux images selon l'outil, et c'est exactement la situation
+     * qu'on cherche à éviter en publiant sous un nom que les indexeurs
+     * connaissent.
+     */
+    function test_TokenURIIsTheStandardNameForTheSameDocument() public view {
+        assertEq(token.tokenURI(), METADATA_URI, "tokenURI ne rend pas le document");
+        assertEq(token.tokenURI(), token.metadataURI(), "les deux accesseurs divergent");
+    }
+
+    /// Y compris pour un document réel : la vignette y est un data URI, donc
+    /// une chaîne longue que rien ne doit tronquer au passage.
+    function test_TokenURICarriesAWholeOnChainDocument() public {
+        string memory document =
+            'data:application/json;base64,eyJuYW1lIjoiUmV2ZWFsIiwiaW1hZ2UiOiJkYXRhOmltYWdlL3dlYnA7YmFzZTY0LFVrbEdSZz09In0=';
+        (address t,) = launcher.launch("Reveal", "REVEAL", document);
+        assertEq(RevealToken(t).tokenURI(), document, "document altere");
+    }
 }

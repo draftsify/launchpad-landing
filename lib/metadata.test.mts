@@ -127,5 +127,15 @@ check(
   JSON.stringify(back)
 );
 
+/**
+ * ERC-1046 attend `decimals` dans le document rendu par `tokenURI()`, et c'est
+ * ce document-là que le contrat rend. Le champ ne sert à rien à l'affichage :
+ * seul un indexeur le lit, et c'est précisément pour lui qu'il est écrit.
+ */
+const written = JSON.parse(
+  Buffer.from(round.slice(round.indexOf(",") + 1), "base64").toString("utf8")
+);
+check("le document porte decimals: 18 (ERC-1046)", written.decimals === 18);
+
 console.log(`\n${pass} ok, ${fail} echec(s)`);
 process.exit(fail ? 1 : 0);
