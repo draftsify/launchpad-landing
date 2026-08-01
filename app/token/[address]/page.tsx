@@ -49,10 +49,14 @@ export async function generateMetadata({
     const description =
       meta?.description ??
       `${symbol} on ${activeChain.name}: a tenth sellable at once, all of it after fifteen minutes.`;
-    const image = meta?.image
-      ? `${siteUrl()}/api/token/${address}/image`
-      : undefined;
 
+    /**
+     * Aucune image déclarée ici, et c'est volontaire : `opengraph-image.tsx`
+     * dessine la carte, et Next l'attache aux deux protocoles. Une entrée
+     * `images` en plus produirait deux `og:image`, dont un WebP de 256 px que
+     * les robots de Facebook et de Telegram ne savent pas décoder — et rien ne
+     * dit lequel des deux ils choisiraient.
+     */
     return {
       title,
       description,
@@ -60,19 +64,8 @@ export async function generateMetadata({
         title,
         description,
         url: `${siteUrl()}/token/${address}`,
-        ...(image ? { images: [{ url: image }] } : {}),
       },
-      /**
-       * `summary` quand il y a un logo, et non `summary_large_image` : ce que
-       * porte le contrat est une vignette carrée de 256 px. Annoncer une grande
-       * image la ferait étirer sur toute la largeur de la carte.
-       */
-      twitter: {
-        card: image ? "summary" : "summary_large_image",
-        title,
-        description,
-        ...(image ? { images: [image] } : {}),
-      },
+      twitter: { card: "summary_large_image", title, description },
     };
   } catch {
     // Un nœud muet ne doit pas empêcher la page de se rendre : elle relit tout

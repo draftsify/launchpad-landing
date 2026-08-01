@@ -51,7 +51,10 @@ export async function GET(
       if (meta?.website) links.website = `https://${meta.website}`;
       if (meta?.x) links.x = `https://x.com/${meta.x}`;
       if (meta?.telegram) links.telegram = `https://t.me/${meta.telegram}`;
-      if (meta?.discord) links.discord = `https://${meta.discord}`;
+      // `parseMetadata` retire l'hôte et ne garde que le code d'invitation :
+      // le recoller ici évitait une URL de la forme `https://AbC123`, qui ne
+      // mène nulle part et que personne ne vérifiait.
+      if (meta?.discord) links.discord = `https://discord.gg/${meta.discord}`;
     }
 
     return NextResponse.json(

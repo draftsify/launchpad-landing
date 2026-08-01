@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { siteUrl } from "@/lib/chain";
 import { WalletProvider } from "@/components/site/wallet-provider";
 
 const geistSans = Geist({
@@ -14,6 +15,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  /**
+   * L'origine sur laquelle Next rend absolues les URL d'images d'aperçu.
+   *
+   * Sans elle, il se rabat sur `VERCEL_URL`, c'est-à-dire l'URL propre au
+   * déploiement — celle qui change à chaque publication et que la protection
+   * de déploiement peut fermer. Un robot d'aperçu recevait alors un 401 sur
+   * l'image, et le lien s'affichait sans elle sans que rien ne le signale.
+   */
+  metadataBase: new URL(siteUrl()),
   title: "Reveal — Price Discovery Protocol",
   description:
     "The launchpad optimized for price discovery. More efficient, fairer and more sustainable markets, with rules known upfront and a reasonable exit always open.",

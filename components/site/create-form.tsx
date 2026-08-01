@@ -547,9 +547,10 @@ export function CreateForm() {
               <PrefixInput
                 id="link-discord"
                 icon={<MessageCircle />}
+                prefix="discord.gg/"
                 value={discord}
                 onChange={(e) => setDiscord(e.target.value)}
-                placeholder="discord.gg/reveal"
+                placeholder="reveal"
               />
             </Field>
           </div>

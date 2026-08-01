@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Globe, Loader2, Send, TriangleAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  Globe,
+  Loader2,
+  MessageCircle,
+  Send,
+  TriangleAlert,
+} from "lucide-react";
 
 import { activeChain, explorerAddress, isDeployed } from "@/lib/chain";
 import { formatAge, formatTokens, formatValue } from "@/lib/format";
@@ -148,6 +155,14 @@ export function TokenDetail({ slug }: { slug: string }) {
       label: `t.me/${meta.telegram}`,
       href: `https://t.me/${meta.telegram}`,
       icon: <Send />,
+    },
+    // Le formulaire demande un Discord depuis le début et l'écrit dans le
+    // contrat ; cette liste l'oubliait. Un créateur remplissait donc un champ
+    // qui n'apparaissait nulle part, sans rien pour le lui dire.
+    meta?.discord && {
+      label: `discord.gg/${meta.discord}`,
+      href: `https://discord.gg/${meta.discord}`,
+      icon: <MessageCircle />,
     },
   ]
     // Certains documents portent un lien qui n'aide personne. On ne le montre

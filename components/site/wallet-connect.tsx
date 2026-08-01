@@ -37,7 +37,7 @@ export function WalletConnect() {
       <div className="mx-auto grid max-w-4xl grid-cols-1 items-center gap-10 md:grid-cols-2">
         <div className="space-y-4">
           <h2 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
-            Connect with your favorite wallet
+            Connect with your wallet
           </h2>
           <p className="text-sm text-muted-foreground md:text-base">
             Bring any EVM wallet. Reveal reads your positions and unlock
