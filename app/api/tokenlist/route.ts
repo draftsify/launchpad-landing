@@ -46,7 +46,7 @@ export async function GET() {
           decimals: 18,
           // Absent plutôt que cassé : une entrée pointant sur une image qui
           // n'existe pas est pire qu'une entrée sans image.
-          ...(launch.meta?.image
+          ...(launch.meta?.thumbnail || launch.meta?.image
             ? { logoURI: `${base}/api/token/${launch.address}/image` }
             : {}),
         })),

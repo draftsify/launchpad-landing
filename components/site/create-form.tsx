@@ -179,6 +179,8 @@ export function CreateForm() {
   const [ticker, setTicker] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<string | null>(null);
+  /** `ipfs://<cid>` de l'image d'origine, quand l'épinglage a abouti. */
+  const [pinned, setPinned] = useState<string | null>(null);
   const [website, setWebsite] = useState("");
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
@@ -252,6 +254,32 @@ export function CreateForm() {
         kind: "error",
         message: err instanceof Error ? err.message : "Could not read that image",
       });
+      return;
+    }
+
+    /**
+     * L'original part sur IPFS, en arrière-plan.
+     *
+     * La vignette de la chaîne fait 256 px : elle suffit à une liste, pas à une
+     * carte de partage ni à un terminal qui affiche un logo en grand. IPFS
+     * porte donc le fichier tel qu'il a été choisi, et son CID entre dans le
+     * document sous le nom `image` — celui que les indexeurs lisent.
+     *
+     * Un échec ne bloque rien et ne s'affiche pas : le lancement part avec sa
+     * vignette, qui est déjà l'essentiel. Prévenir d'une panne sans conséquence
+     * ferait hésiter sur un lancement qui va parfaitement se passer.
+     */
+    setPinned(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch("/api/pin", { method: "POST", body });
+      if (response.ok) {
+        const { uri } = (await response.json()) as { uri?: string };
+        if (uri) setPinned(uri);
+      }
+    } catch {
+      // Sans conséquence : voir plus haut.
     }
   }
 
@@ -267,7 +295,11 @@ export function CreateForm() {
         name: name.trim(),
         symbol: ticker.trim(),
         description,
-        image: image ?? undefined,
+        // `image` d'abord le CID, parce que c'est le champ que lisent les
+        // indexeurs ; la vignette de la chaîne le remplace quand l'épinglage
+        // n'a pas abouti, pour qu'un document ne sorte jamais sans image.
+        image: pinned ?? image ?? undefined,
+        thumbnail: image ?? undefined,
         website,
         x,
         telegram,

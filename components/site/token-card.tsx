@@ -12,6 +12,7 @@ import { slugOf, type Launch } from "@/lib/onchain";
 import { CopyAddress } from "@/components/site/copy-address";
 import { TokenMark } from "@/components/site/token-mark";
 import { cn } from "@/lib/utils";
+import { imageSrc } from "@/lib/metadata";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -75,7 +76,7 @@ export function TokenCard({
         <div className="flex items-start gap-4 sm:gap-5">
           <TokenMark
             symbol={launch.symbol}
-            image={launch.meta?.image}
+            image={imageSrc(launch.meta)}
             className="transition-transform duration-300 group-hover:scale-[1.03]"
           />
 

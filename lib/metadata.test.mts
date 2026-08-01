@@ -9,7 +9,7 @@
  * Lancé par `npm run test:lib`, sans dépendance : Node exécute le TypeScript en
  * retirant les types.
  */
-import { parseMetadata, toDataUri } from "./metadata.ts";
+import { imageSrc, parseMetadata, toDataUri } from "./metadata.ts";
 
 const enc = (o: unknown) =>
   "data:application/json;base64," + Buffer.from(JSON.stringify(o)).toString("base64");
@@ -103,6 +103,46 @@ check(
 check(
   "url telegram ramenee au pseudo",
   parseMetadata(enc({ ...base, telegram: "https://t.me/revealchat" }))?.telegram === "revealchat"
+);
+
+console.log("--- ipfs ---");
+const cid = "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
+check(
+  "ipfs:// est accepte dans image",
+  parseMetadata(enc({ ...base, image: `ipfs://${cid}` }))?.image === `ipfs://${cid}`
+);
+check(
+  "un cid malforme est refuse",
+  parseMetadata(enc({ ...base, image: "ipfs://pas-un-cid" }))?.image === undefined
+);
+check(
+  "un chemin apres le cid est refuse",
+  parseMetadata(enc({ ...base, image: `ipfs://${cid}/../secret` }))?.image === undefined
+);
+check(
+  "https:// reste refuse",
+  parseMetadata(enc({ ...base, image: "https://example.com/logo.png" }))?.image ===
+    undefined
+);
+check(
+  "thumbnail n'accepte que du data uri",
+  parseMetadata(enc({ ...base, thumbnail: `ipfs://${cid}` }))?.thumbnail === undefined
+);
+check(
+  "un ancien document met sa vignette dans les deux champs",
+  (() => {
+    const old = parseMetadata(enc({ ...base, image: png }));
+    return old?.image === png && old?.thumbnail === png;
+  })()
+);
+check(
+  "imageSrc prefere la vignette de la chaine",
+  imageSrc(parseMetadata(enc({ ...base, image: `ipfs://${cid}`, thumbnail: png }))) === png
+);
+check(
+  "imageSrc passe par notre passerelle sans vignette",
+  imageSrc(parseMetadata(enc({ ...base, image: `ipfs://${cid}` }))) ===
+    `/api/ipfs/${cid}`
 );
 
 console.log("--- documents casses ---");

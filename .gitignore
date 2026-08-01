@@ -45,3 +45,5 @@ next-env.d.ts
 # skills installés (voir skills-lock.json)
 /.agents/
 /.claude/
+
+.env*

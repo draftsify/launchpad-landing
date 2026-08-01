@@ -28,6 +28,7 @@ import { useRules } from "@/components/site/use-rules";
 import { useEthPrice } from "@/components/site/use-eth-price";
 import { XIcon } from "@/components/x-icon";
 import { formatEther } from "viem";
+import { imageSrc } from "@/lib/metadata";
 
 function Frame({ children }: { children: React.ReactNode }) {
   return (
@@ -176,7 +177,7 @@ export function TokenDetail({ slug }: { slug: string }) {
     <Frame>
       <header className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4 sm:gap-5">
-          <TokenMark symbol={launch.symbol} image={meta?.image} />
+          <TokenMark symbol={launch.symbol} image={imageSrc(meta)} />
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">

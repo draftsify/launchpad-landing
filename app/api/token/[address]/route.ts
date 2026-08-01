@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { activeChain, isDeployed, publicClient, siteUrl } from "@/lib/chain";
 import { tokenAbi } from "@/lib/launcher";
-import { parseMetadata } from "@/lib/metadata";
+import { ipfsCid, parseMetadata } from "@/lib/metadata";
 import { linksMuted } from "@/lib/hidden";
 
 /**
@@ -67,7 +67,13 @@ export async function GET(
         description: meta?.description,
         // Servie par nous, mais décodée depuis le contrat à chaque fois : cette
         // URL n'ajoute aucune source de vérité, elle change juste de transport.
-        image: meta?.image ? `${siteUrl()}/api/token/${token}/image` : undefined,
+        image:
+          meta?.thumbnail || meta?.image
+            ? `${siteUrl()}/api/token/${token}/image`
+            : undefined,
+        // L'original, sous la forme que résolvent les indexeurs qui savent le
+        // faire. Absent quand rien n'a été épinglé, plutôt que vide.
+        image_ipfs: meta?.image && ipfsCid(meta.image) ? meta.image : undefined,
         external_url: `${siteUrl()}/token/${token}`,
         links,
       },

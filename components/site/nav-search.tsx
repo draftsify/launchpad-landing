@@ -10,6 +10,7 @@ import { slugOf } from "@/lib/onchain";
 import { matchesQuery } from "@/lib/tokens";
 import { TokenMark } from "@/components/site/token-mark";
 import { useLaunches } from "@/components/site/use-launches";
+import { imageSrc } from "@/lib/metadata";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -128,7 +129,7 @@ export function NavSearch() {
                   >
                     <TokenMark
                       symbol={launch.symbol}
-                      image={launch.meta?.image}
+                      image={imageSrc(launch.meta)}
                       size="sm"
                     />
                     <span className="min-w-0 flex-1">

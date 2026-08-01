@@ -1,6 +1,6 @@
 import { publicClient, isDeployed, LAUNCHER_ADDRESS } from "@/lib/chain";
 import { tokenAbi } from "@/lib/launcher";
-import { parseMetadata } from "@/lib/metadata";
+import { ipfsCid, parseMetadata } from "@/lib/metadata";
 
 /**
  * Le logo d'un token, servi comme une vraie image.
@@ -26,7 +26,7 @@ export const revalidate = false;
 const IMMUTABLE = "public, max-age=31536000, s-maxage=31536000, immutable";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ address: string }> }
 ) {
   const { address } = await params;
@@ -58,9 +58,25 @@ export async function GET(
    * d'afficher.
    */
   const meta = parseMetadata(uri);
-  if (!meta?.image) return new Response("No image", { status: 404 });
 
-  const [, mime, body] = meta.image.match(/^data:([^;]+);base64,(.+)$/) ?? [];
+  /**
+   * La vignette de la chaîne d'abord, l'original ensuite.
+   *
+   * Cette URL est celle que consomment les agrégateurs : elle doit rendre des
+   * octets, tout de suite, sans dépendre d'une passerelle. La vignette est déjà
+   * dans le contrat. Un token épinglé mais sans vignette — cas qui n'arrive que
+   * si le document a été écrit à la main — est renvoyé vers la passerelle, qui
+   * applique ses propres bornes.
+   */
+  const cid = ipfsCid(meta?.image);
+  if (!meta?.thumbnail && cid) {
+    return Response.redirect(new URL(`/api/ipfs/${cid}`, request.url), 302);
+  }
+
+  const inline = meta?.thumbnail;
+  if (!inline) return new Response("No image", { status: 404 });
+
+  const [, mime, body] = inline.match(/^data:([^;]+);base64,(.+)$/) ?? [];
   if (!mime || !body) return new Response("No image", { status: 404 });
 
   const bytes = Buffer.from(body, "base64");

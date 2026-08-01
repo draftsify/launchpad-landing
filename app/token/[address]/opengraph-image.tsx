@@ -1,9 +1,9 @@
 import { ImageResponse } from "next/og";
 import sharp from "sharp";
 
-import { activeChain, isDeployed, publicClient } from "@/lib/chain";
+import { activeChain, isDeployed, publicClient, siteUrl } from "@/lib/chain";
 import { tokenAbi } from "@/lib/launcher";
-import { parseMetadata } from "@/lib/metadata";
+import { ipfsCid, parseMetadata } from "@/lib/metadata";
 import { isHidden } from "@/lib/hidden";
 
 /**
@@ -39,19 +39,25 @@ const MUTED = "#a1a1a1";
  * la carte, donc l'aperçu. sharp décode ce que le navigateur a encodé, quel que
  * soit le format qu'il a choisi, et rend des octets que satori accepte.
  */
-async function toPng(dataUri: string): Promise<string | null> {
-  const [, body] = dataUri.match(/^data:[^;]+;base64,(.+)$/) ?? [];
-  if (!body) return null;
+async function toPngFromBytes(input: Buffer): Promise<string | null> {
   try {
-    const png = await sharp(Buffer.from(body, "base64"))
-      .resize(256, 256, { fit: "cover" })
+    const png = await sharp(input)
+      // 440 plutôt que 256 : la carte affiche 220 px CSS, et un écran à deux
+      // fois la densité les rend en 440 pixels réels.
+      .resize(440, 440, { fit: "cover" })
       .png()
       .toBuffer();
     return `data:image/png;base64,${png.toString("base64")}`;
   } catch {
-    // Une vignette illisible ne doit pas coûter la carte : on la dessine sans.
+    // Une image illisible ne doit pas coûter la carte : on la dessine sans.
     return null;
   }
+}
+
+async function toPng(dataUri: string): Promise<string | null> {
+  const [, body] = dataUri.match(/^data:[^;]+;base64,(.+)$/) ?? [];
+  if (!body) return null;
+  return toPngFromBytes(Buffer.from(body, "base64"));
 }
 
 export default async function Image({
@@ -76,7 +82,28 @@ export default async function Image({
       name = onChainName;
       symbol = onChainSymbol;
       const meta = parseMetadata(uri);
-      if (meta?.image) logo = await toPng(meta.image);
+      /**
+       * L'original d'IPFS quand il existe, la vignette sinon.
+       *
+       * Cette carte fait 1200 px de large : 256 px agrandis y sont visiblement
+       * mous. Le CID est résolu par notre propre passerelle, qui borne le type
+       * et la taille — et si elle ne répond pas, la vignette de la chaîne prend
+       * le relais plutôt que de laisser une carte sans logo.
+       */
+      const cid = ipfsCid(meta?.image);
+      if (cid) {
+        try {
+          const response = await fetch(`${siteUrl()}/api/ipfs/${cid}`, {
+            signal: AbortSignal.timeout(6_000),
+          });
+          if (response.ok) {
+            logo = await toPngFromBytes(Buffer.from(await response.arrayBuffer()));
+          }
+        } catch {
+          // Passerelle muette : on retombe sur la vignette, juste en dessous.
+        }
+      }
+      if (!logo && meta?.thumbnail) logo = await toPng(meta.thumbnail);
     } catch {
       // Un nœud muet rend une carte générique plutôt qu'une erreur : un aperçu
       // manquant se remarque plus qu'un aperçu sobre.
