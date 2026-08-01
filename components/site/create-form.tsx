@@ -183,6 +183,17 @@ export function CreateForm() {
   const [image, setImage] = useState<string | null>(null);
   /** `ipfs://<cid>` de l'image d'origine, quand l'épinglage a abouti. */
   const [pinned, setPinned] = useState<string | null>(null);
+  /**
+   * Où en est l'épinglage, et pourquoi c'est affiché.
+   *
+   * Ce CID est ce que `logo()` rendra sur la chaîne, et `logo()` est ce que les
+   * terminaux lisent pour afficher une image — mesuré sur trois tokens de cette
+   * chaîne. Un échec silencieux produisait donc un lancement sans logo nulle
+   * part, sans que personne puisse le savoir avant de regarder un agrégateur.
+   */
+  const [pinning, setPinning] = useState<"idle" | "working" | "done" | "failed">(
+    "idle"
+  );
   const [website, setWebsite] = useState("");
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
@@ -291,16 +302,22 @@ export function CreateForm() {
      * ferait hésiter sur un lancement qui va parfaitement se passer.
      */
     setPinned(null);
+    setPinning("working");
     try {
       const body = new FormData();
       body.append("file", file);
       const response = await fetch("/api/pin", { method: "POST", body });
       if (response.ok) {
         const { uri } = (await response.json()) as { uri?: string };
-        if (uri) setPinned(uri);
+        if (uri) {
+          setPinned(uri);
+          setPinning("done");
+          return;
+        }
       }
+      setPinning("failed");
     } catch {
-      // Sans conséquence : voir plus haut.
+      setPinning("failed");
     }
   }
 
@@ -518,6 +535,16 @@ export function CreateForm() {
                   <Trash2 className="size-3" />
                   Remove
                 </button>
+              )}
+
+              {image && pinning !== "idle" && (
+                <p className="mt-2 max-w-28 text-[11px] leading-tight text-muted-foreground">
+                  {pinning === "working"
+                    ? "Pinning to IPFS…"
+                    : pinning === "done"
+                      ? "Pinned. Aggregators will find this logo."
+                      : "Pinning failed — the launch will carry the on-chain thumbnail only, and aggregators will show no logo. Pick the image again to retry."}
+                </p>
               )}
             </div>
 
