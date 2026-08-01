@@ -182,6 +182,30 @@ export async function readRules(): Promise<Rules | null> {
  * pouvoir borner le champ pendant qu'on le remplit, pas sur un échec de
  * signature.
  */
+/**
+ * Ce launcher sait-il écrire `logo()`, `description()` et `socials()` ?
+ *
+ * Testé par la présence de `tokenFactory()`, qui n'existe que sur les launchers
+ * qui fabriquent leurs tokens hors de leur propre bytecode — c'est-à-dire ceux
+ * qui ont eu la place d'ajouter ces champs. Sur un launcher antérieur l'appel
+ * revert, et le formulaire retombe sur l'ancien point d'entrée : proposer une
+ * signature qui n'existe pas ferait échouer le lancement après la signature,
+ * donc après que le créateur a cru lancer.
+ */
+export async function readWritesTokenInfo(): Promise<boolean> {
+  if (!isDeployed) return false;
+  try {
+    const factory = await publicClient.readContract({
+      address: LAUNCHER_ADDRESS as `0x${string}`,
+      abi: launcherAbi,
+      functionName: "tokenFactory",
+    });
+    return factory !== "0x0000000000000000000000000000000000000000";
+  } catch {
+    return false;
+  }
+}
+
 export async function readCreatorBuyCap(): Promise<bigint | null> {
   if (!isDeployed) return null;
   return publicClient.readContract({

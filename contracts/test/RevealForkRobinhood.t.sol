@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 
 import {RevealLauncher} from "../src/RevealLauncher.sol";
+import {RevealTokenFactory} from "../src/RevealTokenFactory.sol";
 import {RevealLocker} from "../src/RevealLocker.sol";
 import {RevealToken} from "../src/RevealToken.sol";
 import {INonfungiblePositionManager} from "../src/interfaces/INonfungiblePositionManager.sol";
@@ -42,6 +43,7 @@ contract RevealForkRobinhoodTest is Test {
     uint16 constant CARDINALITY = 120;
 
     RevealLauncher internal launcher;
+    RevealTokenFactory internal tokenFactory;
     RevealLocker internal locker;
     RevealToken internal token;
     IUniswapV3Pool internal pool;
@@ -65,10 +67,12 @@ contract RevealForkRobinhoodTest is Test {
         }
 
         router = new TestSwapRouter();
+        tokenFactory = new RevealTokenFactory();
         launcher = new RevealLauncher(
             RH_V3_FACTORY,
             RH_POSITION_MANAGER,
             RH_WETH,
+            address(tokenFactory),
             CARDINALITY,
             SUPPLY,
             treasury,
@@ -79,6 +83,7 @@ contract RevealForkRobinhoodTest is Test {
                 buyRamp: 10 minutes
             })
         );
+        tokenFactory.attach(address(launcher));
         locker = launcher.locker();
 
         vm.prank(creator);

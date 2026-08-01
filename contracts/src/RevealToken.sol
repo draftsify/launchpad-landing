@@ -6,6 +6,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3.sol";
 import {Rules, RevealRules} from "./libraries/RevealRules.sol";
+import {LaunchMeta, Socials, TokenInfo} from "./RevealTypes.sol";
 
 /**
  * Token d'un lancement Reveal.
@@ -52,6 +53,16 @@ contract RevealToken is ERC20 {
     uint256 public constant MAX_NAME_BYTES = 64;
     uint256 public constant MAX_SYMBOL_BYTES = 16;
     uint256 public constant MAX_METADATA_BYTES = 16_384;
+    /**
+     * Bornes des champs lisibles séparément.
+     *
+     * Elles existent parce que ces chaînes sont rendues telles quelles par des
+     * outils tiers, et qu'un `logo` de quatre kilo-octets serait un moyen commode
+     * de faire tomber un indexeur en écrivant un token. 256 tient un `ipfs://`
+     * plus large que tout CID existant.
+     */
+    uint256 public constant MAX_LINK_BYTES = 256;
+    uint256 public constant MAX_DESCRIPTION_BYTES = 1_024;
 
     /**
      * Ce que le créateur peut acheter dans la transaction de lancement, en bps
@@ -136,6 +147,34 @@ contract RevealToken is ERC20 {
         return metadataURI;
     }
 
+    /**
+     * Les mêmes informations, sous les noms que cette chaîne interroge.
+     *
+     * `logo` porte un `ipfs://<cid>` — pas un data URI, pas une URL HTTP. C'est
+     * ce que rendent les onze autres tokens de cette chaîne qui exposent ce
+     * champ, et un indexeur qui sait résoudre l'un saura résoudre l'autre.
+     *
+     * Écrits une fois dans le constructeur, sans setter, comme tout le reste
+     * ici : ce qui n'est pas mis au lancement ne le sera jamais.
+     */
+    string public logo;
+    string public description;
+    Socials private _socials;
+
+    function socials() external view returns (Socials memory) {
+        return _socials;
+    }
+
+    function getTokenInfo() external view returns (TokenInfo memory) {
+        return TokenInfo(creator, logo, description, _socials);
+    }
+
+    /// Le nom qu'emploie le reste de la chaîne pour ce que nous appelons
+    /// `creator`. Même adresse, deux vocabulaires.
+    function deployer() external view returns (address) {
+        return creator;
+    }
+
     address public pool;
     address public quote;
     /**
@@ -172,10 +211,22 @@ contract RevealToken is ERC20 {
     error CreatorBuyTooLarge(uint256 remaining);
     error PositionLocked(uint256 releasable);
 
+    /**
+     * `launcher_` est passé plutôt que déduit de `msg.sender`.
+     *
+     * Le token n'est plus construit par le launcher lui-même mais par
+     * `RevealTokenFactory` : le code de création d'un contrat est embarqué dans
+     * celui qui l'instancie, et le launcher touchait la limite de 24 576 octets
+     * de l'EVM. Déduire le launcher de l'appelant désignerait donc la fabrique,
+     * qui n'a aucun droit ici. La fabrique n'ajoute aucun pouvoir : elle refuse
+     * tout appelant autre que le launcher, et la suite ne dépend que de
+     * `launcher_`.
+     */
     constructor(
+        address launcher_,
         string memory name_,
         string memory symbol_,
-        string memory metadataURI_,
+        LaunchMeta memory meta,
         uint256 supply,
         Rules memory rules_
     ) ERC20(name_, symbol_) {
@@ -183,14 +234,19 @@ contract RevealToken is ERC20 {
         if (
             bytes(name_).length == 0 || bytes(name_).length > MAX_NAME_BYTES
                 || bytes(symbol_).length == 0 || bytes(symbol_).length > MAX_SYMBOL_BYTES
-                || bytes(metadataURI_).length > MAX_METADATA_BYTES
+                || bytes(meta.uri).length > MAX_METADATA_BYTES
+                || bytes(meta.logo).length > MAX_LINK_BYTES
+                || bytes(meta.description).length > MAX_DESCRIPTION_BYTES
         ) revert StringTooLong();
 
         RevealRules.validate(rules_);
         rules = rules_;
-        metadataURI = metadataURI_;
-        launcher = msg.sender;
-        _mint(msg.sender, supply);
+        metadataURI = meta.uri;
+        logo = meta.logo;
+        description = meta.description;
+        _socials = meta.socials;
+        launcher = launcher_;
+        _mint(launcher_, supply);
     }
 
     /**

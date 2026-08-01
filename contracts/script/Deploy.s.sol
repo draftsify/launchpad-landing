@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Script, console} from "forge-std/Script.sol";
 
 import {RevealLauncher} from "../src/RevealLauncher.sol";
+import {RevealTokenFactory} from "../src/RevealTokenFactory.sol";
 import {RevealLocker} from "../src/RevealLocker.sol";
 import {Rules} from "../src/libraries/RevealRules.sol";
 
@@ -85,6 +86,8 @@ contract Deploy is Script {
     error NotAContract(string what, address who);
     error WrongMainnetAddress(string what, address expected, address given);
 
+    RevealTokenFactory internal tokenFactory;
+
     function run() external returns (RevealLauncher launcher) {
         address factory = vm.envOr("AMM_FACTORY", RH_V3_FACTORY);
         address weth = vm.envOr("WETH", RH_WETH);
@@ -115,8 +118,14 @@ contract Deploy is Script {
         _mustHaveCode("POSITION_MANAGER", manager);
 
         vm.startBroadcast();
-        launcher =
-            new RevealLauncher(factory, manager, weth, CARDINALITY, SUPPLY, treasury, _rules());
+        // La fabrique d'abord, le launcher ensuite, l'attache dans la foulée :
+        // les trois dans la même diffusion, donc aucun bloc pendant lequel une
+        // fabrique non attachée traîne sur la chaîne.
+        tokenFactory = new RevealTokenFactory();
+        launcher = new RevealLauncher(
+            factory, manager, weth, address(tokenFactory), CARDINALITY, SUPPLY, treasury, _rules()
+        );
+        tokenFactory.attach(address(launcher));
         vm.stopBroadcast();
 
         RevealLocker locker = launcher.locker();
@@ -124,6 +133,7 @@ contract Deploy is Script {
         console.log("chainId        ", block.chainid);
         console.log("RevealLauncher ", address(launcher));
         console.log("RevealLocker   ", address(locker));
+        console.log("RevealTokenFactory", address(tokenFactory));
         console.log("  treasury     ", locker.treasury());
         console.log("  v3 factory   ", factory);
         console.log("  posn manager ", manager);
@@ -163,6 +173,7 @@ contract Deploy is Script {
         vm.serializeUint(k, "block", block.number);
         vm.serializeAddress(k, "launcher", address(launcher));
         vm.serializeAddress(k, "locker", address(locker));
+        vm.serializeAddress(k, "tokenFactory", address(tokenFactory));
         vm.serializeAddress(k, "treasury", treasury);
         vm.serializeAddress(k, "ammFactory", factory);
         vm.serializeAddress(k, "positionManager", manager);
@@ -178,6 +189,7 @@ contract Deploy is Script {
         vm.serializeUint(k, "graduationQuote", locker.GRADUATION_QUOTE());
         vm.serializeBytes32(k, "launcherCodehash", address(launcher).codehash);
         vm.serializeBytes32(k, "lockerCodehash", address(locker).codehash);
+        vm.serializeBytes32(k, "tokenFactoryCodehash", address(tokenFactory).codehash);
 
         (uint16 initialUnlockBps, uint32 unlockSeconds, uint32 launchDelay, uint32 buyRamp) =
             launcher.rules();

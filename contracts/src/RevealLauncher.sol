@@ -11,6 +11,8 @@ import {Rules, RevealRules} from "./libraries/RevealRules.sol";
 import {TickMath} from "./libraries/TickMath.sol";
 import {RevealLocker} from "./RevealLocker.sol";
 import {RevealToken} from "./RevealToken.sol";
+import {RevealTokenFactory} from "./RevealTokenFactory.sol";
+import {LaunchMeta, Socials} from "./RevealTypes.sol";
 
 /**
  * Point d'entrée d'un lancement. Déploie le token, crée son pool Uniswap V3,
@@ -56,6 +58,13 @@ contract RevealLauncher {
     /// Propriétaire définitif des positions, déployé ici : son `launcher` est
     /// donc forcément nous, sans dépendance circulaire ni administration.
     RevealLocker public immutable locker;
+    /**
+     * Fabrique les tokens à notre place.
+     *
+     * Elle ne peut pas être remplacée, et elle n'accepte que nous : le couple
+     * est scellé au déploiement, dans la même transaction.
+     */
+    RevealTokenFactory public immutable tokenFactory;
     address public immutable quote;
     uint16 public immutable observationCardinality;
     /**
@@ -155,6 +164,7 @@ contract RevealLauncher {
         address ammFactory_,
         address positionManager_,
         address quote_,
+        address tokenFactory_,
         uint16 observationCardinality_,
         uint256 supply_,
         address treasury_,
@@ -165,10 +175,12 @@ contract RevealLauncher {
         _mustBeContract(ammFactory_);
         _mustBeContract(positionManager_);
         _mustBeContract(quote_);
+        _mustBeContract(tokenFactory_);
         // La trésorerie fait exception, et c'est délibéré : c'est un wallet.
         // Exiger du code y interdirait le cas normal.
         if (treasury_ == address(0)) revert ZeroAddress();
 
+        tokenFactory = RevealTokenFactory(tokenFactory_);
         ammFactory = IUniswapV3Factory(ammFactory_);
         positionManager = INonfungiblePositionManager(positionManager_);
         quote = quote_;
@@ -260,7 +272,23 @@ contract RevealLauncher {
         string calldata symbol,
         string calldata metadataURI
     ) external nonReentrant returns (address token, address pool) {
-        return _launch(name, symbol, metadataURI);
+        Socials memory none;
+        return _launch(name, symbol, LaunchMeta(metadataURI, "", "", none));
+    }
+
+    /**
+     * Le meme lancement, avec les champs que cette chaine sait lire.
+     *
+     * `logo`, `description` et `socials` deviennent des fonctions du token,
+     * consultables sans savoir que Reveal existe. Voir RevealTypes.sol pour ce
+     * qui a ete mesure sur la chaine avant de choisir cette forme.
+     */
+    function launch(
+        string calldata name,
+        string calldata symbol,
+        LaunchMeta calldata meta
+    ) external nonReentrant returns (address token, address pool) {
+        return _launch(name, symbol, meta);
     }
 
     /**
@@ -286,16 +314,27 @@ contract RevealLauncher {
         string calldata metadataURI
     ) external payable nonReentrant returns (address token, address pool) {
         if (msg.value == 0) revert NoCreatorBuy();
-        (token, pool) = _launch(name, symbol, metadataURI);
+        Socials memory none;
+        (token, pool) = _launch(name, symbol, LaunchMeta(metadataURI, "", "", none));
+        _creatorBuy(token, pool, token < quote);
+    }
+
+    function launchWithBuy(
+        string calldata name,
+        string calldata symbol,
+        LaunchMeta calldata meta
+    ) external payable nonReentrant returns (address token, address pool) {
+        if (msg.value == 0) revert NoCreatorBuy();
+        (token, pool) = _launch(name, symbol, meta);
         _creatorBuy(token, pool, token < quote);
     }
 
     function _launch(
         string calldata name,
         string calldata symbol,
-        string calldata metadataURI
+        LaunchMeta memory meta
     ) private returns (address token, address pool) {
-        RevealToken deployed = new RevealToken(name, symbol, metadataURI, supply, rules);
+        RevealToken deployed = tokenFactory.deploy(name, symbol, meta, supply, rules);
         token = address(deployed);
 
         if (ammFactory.getPool(token, quote, FEE) != address(0)) revert PoolAlreadyExists();

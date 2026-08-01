@@ -37,7 +37,7 @@ import {
 } from "@/lib/metadata";
 import { useWallet } from "@/components/site/wallet-provider";
 import { CREATOR_BUY_MAX_PERCENT, formatDuration } from "@/lib/presets";
-import { readCreatorBuyCap } from "@/lib/onchain";
+import { readCreatorBuyCap, readWritesTokenInfo } from "@/lib/onchain";
 import { estimateCreatorBuy, maxCreatorBuyQuote } from "@/lib/uniswap";
 import { formatTokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -215,6 +215,25 @@ export function CreateForm() {
   }, []);
   const devBuySupported = cap !== null;
 
+  /**
+   * Ce launcher écrit-il les champs que les indexeurs lisent ?
+   *
+   * Lu sur la chaîne, jamais supposé : appeler un point d'entrée absent ferait
+   * échouer le lancement après la signature. Faux sur un launcher antérieur, et
+   * le document complet reste écrit dans `metadataURI` de toute façon — c'est
+   * la lisibilité par des tiers qui manque, pas la donnée.
+   */
+  const [writesTokenInfo, setWritesTokenInfo] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    readWritesTokenInfo()
+      .then((yes) => alive && setWritesTokenInfo(yes))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const maxDevBuyWei = maxCreatorBuyQuote(cap ?? 0n);
   // Une saisie en cours — « 0. », « », « abc » — ne doit pas casser le rendu.
   const devBuyWei = (() => {
@@ -320,7 +339,26 @@ export function CreateForm() {
       }
 
       const { encodeFunctionData } = await import("viem");
-      const call = launchCall(name.trim(), ticker.trim(), metadataURI, devBuyWei);
+      const call = launchCall(
+        name.trim(),
+        ticker.trim(),
+        {
+          uri: metadataURI,
+          // Le CID plutôt que la vignette : c'est ce champ que les outils de
+          // cette chaîne résolvent, et un data URI de 8 Ko n'y a pas sa place.
+          logo: pinned ?? "",
+          description: description.trim(),
+          socials: {
+            telegram: telegram.trim(),
+            twitter: x.trim(),
+            discord: discord.trim(),
+            website: website.trim(),
+            farcaster: "",
+          },
+        },
+        devBuyWei,
+        writesTokenInfo
+      );
       const data = encodeFunctionData({
         abi: call.abi,
         functionName: call.functionName,

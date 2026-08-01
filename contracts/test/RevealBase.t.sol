@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 
 import {RevealLauncher} from "../src/RevealLauncher.sol";
+import {RevealTokenFactory} from "../src/RevealTokenFactory.sol";
 import {RevealLocker} from "../src/RevealLocker.sol";
 import {RevealToken} from "../src/RevealToken.sol";
 import {IUniswapV3Factory, IUniswapV3Pool} from "../src/interfaces/IUniswapV3.sol";
@@ -39,6 +40,7 @@ abstract contract RevealBase is Test {
     ITickMathExposer internal tickMath;
     TestSwapRouter internal router;
     RevealLauncher internal launcher;
+    RevealTokenFactory internal tokenFactory;
     RevealLocker internal locker;
     RevealToken internal token;
     IUniswapV3Pool internal pool;
@@ -71,15 +73,18 @@ abstract contract RevealBase is Test {
     function setUp() public virtual {
         _setUpEnvironment();
 
+        tokenFactory = new RevealTokenFactory();
         launcher = new RevealLauncher(
             address(amm),
             address(manager),
             address(weth),
+            address(tokenFactory),
             CARDINALITY,
             SUPPLY,
             treasury,
             defaultRules()
         );
+        tokenFactory.attach(address(launcher));
         locker = launcher.locker();
 
         _launch();

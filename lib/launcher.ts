@@ -5,9 +5,18 @@ import { LAUNCHER_ADDRESS, publicClient } from "@/lib/chain";
 /// Sous-ensemble de RevealLauncher dont l'interface a besoin.
 export const launcherAbi = parseAbi([
   "function launch(string name, string symbol, string metadataURI) returns (address token, address pool)",
+  /**
+   * Le lancement qui écrit aussi les champs que cette chaîne interroge.
+   *
+   * `logo`, `description` et `socials` deviennent des fonctions du token, sous
+   * les noms exacts du launchpad de référence — c'est ce que lit l'outillage
+   * écrit pour cette chaîne, qui ne connaîtra jamais `metadataURI()`.
+   */
+  "function launch(string name, string symbol, (string uri, string logo, string description, (string telegram, string twitter, string discord, string website, string farcaster) socials) meta) returns (address token, address pool)",
   // Le même lancement, suivi d'un achat payé par le créateur dans la même
   // transaction. `value` porte le montant : il n'y a pas de paramètre pour ça.
   "function launchWithBuy(string name, string symbol, string metadataURI) payable returns (address token, address pool)",
+  "function launchWithBuy(string name, string symbol, (string uri, string logo, string description, (string telegram, string twitter, string discord, string website, string farcaster) socials) meta) payable returns (address token, address pool)",
   "function creatorBuyCap() view returns (uint256)",
   "function quote() view returns (address)",
   "function tokenCount() view returns (uint256)",
@@ -15,6 +24,7 @@ export const launcherAbi = parseAbi([
   "function supply() view returns (uint256)",
   "function rules() view returns (uint16 initialUnlockBps, uint32 unlockSeconds, uint32 launchDelay, uint32 buyRamp)",
   "function locker() view returns (address)",
+  "function tokenFactory() view returns (address)",
   "function launches(address token) view returns (address pool, uint256 tokenId, uint128 liquidity, int24 tickLower, int24 tickUpper, address creator, uint64 launchedAt)",
   "event Launched(address indexed token, address indexed creator, address pool, uint256 tokenId, uint256 supply, uint128 liquidity, int24 tickLower, int24 tickUpper, (uint16,uint32,uint32,uint32) rules)",
   "event CreatorBought(address indexed token, address indexed creator, uint256 quoteIn, uint256 tokensOut)",
@@ -83,19 +93,48 @@ export const tokenAbi = parseAbi([
  * Un lancement qui s'est offert la première position ne doit pas ressembler à
  * un lancement qui ne l'a pas fait.
  */
+export type LaunchMeta = {
+  uri: string;
+  /** `ipfs://<cid>` de l'image d'origine, ou vide. */
+  logo: string;
+  description: string;
+  socials: {
+    telegram: string;
+    twitter: string;
+    discord: string;
+    website: string;
+    farcaster: string;
+  };
+};
+
+/**
+ * L'appel de lancement, dans la forme que le launcher déployé comprend.
+ *
+ * `structured` n'est pas une préférence mais un fait lu sur la chaîne : les
+ * launchers antérieurs n'ont pas la variante à champs séparés, et l'appeler
+ * ferait échouer le lancement après la signature. L'appelant lit
+ * `tokenFactory()` pour savoir à qui il parle — voir `readWritesTokenInfo`.
+ */
 export function launchCall(
   name: string,
   symbol: string,
-  metadataURI: string,
-  devBuyWei: bigint = 0n
+  meta: LaunchMeta,
+  devBuyWei: bigint = 0n,
+  structured = false
 ) {
+  const functionName = (devBuyWei > 0n ? "launchWithBuy" : "launch") as
+    | "launch"
+    | "launchWithBuy";
+
   return {
     address: LAUNCHER_ADDRESS as `0x${string}`,
     abi: launcherAbi,
-    functionName: (devBuyWei > 0n ? "launchWithBuy" : "launch") as
-      | "launch"
-      | "launchWithBuy",
-    args: [name, symbol, metadataURI] as const,
+    functionName,
+    // viem choisit la surcharge d'après la forme du troisième argument : une
+    // chaîne pour l'ancienne, un tuple pour la nouvelle.
+    args: (structured ? [name, symbol, meta] : [name, symbol, meta.uri]) as
+      | readonly [string, string, string]
+      | readonly [string, string, LaunchMeta],
     value: devBuyWei,
   };
 }
