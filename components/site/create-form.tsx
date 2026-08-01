@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Globe,
   ImagePlus,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/x-icon";
 import { useRules } from "@/components/site/use-rules";
 import { WalletDialog } from "@/components/site/wallet-dialog";
+import { LaunchSuccess } from "@/components/site/launch-success";
 import {
   activeChain,
   explorerAddress,
@@ -770,8 +772,32 @@ export function CreateForm() {
 
             {status.kind === "done" ? (
               <div className="space-y-1.5 rounded-xl border bg-muted/30 p-3">
+                {/* La fenêtre s'ouvre d'elle-même sur le lancement, et se
+                    referme sans rien perdre : ce bloc garde les mêmes liens,
+                    donc fermer trop vite ne coûte pas l'adresse. */}
+                <LaunchSuccess
+                  key={status.hash}
+                  token={status.token}
+                  hash={status.hash}
+                  name={name.trim()}
+                  symbol={ticker.trim()}
+                  image={image ?? undefined}
+                />
                 <p className="text-xs font-medium">Launched.</p>
+                {status.token && (
+                  <p className="font-mono text-xs break-all text-muted-foreground">
+                    {status.token}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  {status.token && (
+                    <Link
+                      href={`/token/${status.token}`}
+                      className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Token page
+                    </Link>
+                  )}
                   {status.token && explorerAddress(status.token) && (
                     <a
                       href={explorerAddress(status.token)}
