@@ -19,13 +19,10 @@ import { parseAbi } from "viem";
 import { formatTokens } from "@/lib/format";
 import {
   readClaimable,
-  readHoldings,
   readSplitsFees,
   readTreasury,
   type Claimable,
-  type Holding,
 } from "@/lib/onchain";
-import { erc20Abi, POOL_FEE, routerAbi, uniswap } from "@/lib/uniswap";
 
 /** WETH : `withdraw` rend l'ETH natif, un pour un, sans frais ni glissement. */
 const wethAbi = parseAbi([
@@ -84,8 +81,6 @@ export function FeesPanel({
   const [wrapped, setWrapped] = useState<{ token: `0x${string}`; balance: bigint } | null>(
     null
   );
-  /** Les tokens recus en frais, avec ce qui peut sortir maintenant. */
-  const [holdings, setHoldings] = useState<Holding[]>([]);
   /** Le locker déployé partage-t-il les frais par côté ? */
   const [splits, setSplits] = useState(false);
 
@@ -145,107 +140,7 @@ export function FeesPanel({
       })
       .catch(() => setWrapped(null));
 
-    readHoldings(account as `0x${string}`)
-      .then(setHoldings)
-      .catch(() => setHoldings([]));
   }, [account]);
-
-  /**
-   * Ramène en WETH la part vendable d'un token reçu en frais.
-   *
-   * Pourquoi ce n'est pas fait par le contrat, alors que ce serait plus simple :
-   * les tokens de frais ouvrent une position comme n'importe quel achat, donc
-   * un dixième seulement est vendable à l'instant de la collecte. Pour tout
-   * convertir en une transaction, le protocole devrait s'exempter de sa propre
-   * règle — c'est-à-dire vendre d'un coup ce qu'il empêche tout le monde de
-   * vendre d'un coup. La contrainte ne dure qu'un quart d'heure ; on attend.
-   */
-  async function sellToEth(holding: Holding) {
-    const provider = window.ethereum;
-    if (!provider || !account || !uniswap || holding.releasable === 0n) return;
-    if (!onCorrectChain && !(await switchChain())) return;
-
-    setNote(null);
-    setBusy(`sell:${holding.address}`);
-    try {
-      const from = account as `0x${string}`;
-      const allowance = await publicClient.readContract({
-        address: holding.address,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [from, uniswap.router],
-      });
-
-      if (allowance < holding.releasable) {
-        const data = encodeFunctionData({
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [uniswap.router, holding.releasable],
-        });
-        const gas = await gasWithBuffer({ account: from, to: holding.address, data });
-        const hash = (await provider.request({
-          method: "eth_sendTransaction",
-          params: [
-            { from, to: holding.address, data, gas: `0x${gas.toString(16)}` },
-          ],
-        })) as `0x${string}`;
-        await publicClient.waitForTransactionReceipt({ hash });
-      }
-
-      const quoteToken = await publicClient.readContract({
-        address: LAUNCHER_ADDRESS as `0x${string}`,
-        abi: launcherAbi,
-        functionName: "quote",
-      });
-      const data = encodeFunctionData({
-        abi: routerAbi,
-        functionName: "exactInputSingle",
-        args: [
-          {
-            tokenIn: holding.address,
-            tokenOut: quoteToken,
-            fee: POOL_FEE,
-            recipient: from,
-            amountIn: holding.releasable,
-            // La trésorerie encaisse ce que le marché donne : refuser une
-            // exécution ferait rester les tokens, ce qui est le contraire du
-            // but. C'est un balayage de frais, pas une prise de position.
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0n,
-          },
-        ],
-      });
-      const gas = await gasWithBuffer({
-        account: from,
-        to: uniswap.router,
-        data,
-      });
-      const hash = (await provider.request({
-        method: "eth_sendTransaction",
-        params: [
-          { from, to: uniswap.router, data, gas: `0x${gas.toString(16)}` },
-        ],
-      })) as `0x${string}`;
-
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      setNote({
-        text:
-          receipt.status === "success"
-            ? "Sold. Unwrap below to get native ETH."
-            : "The transaction reverted.",
-        hash,
-      });
-      refresh();
-    } catch (error) {
-      const message =
-        (error as { shortMessage?: string })?.shortMessage ??
-        (error as Error)?.message ??
-        "Something went wrong";
-      setNote({ text: message.slice(0, 140) });
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function unwrap() {
     const provider = window.ethereum;
@@ -377,8 +272,7 @@ export function FeesPanel({
     !standalone &&
     rows !== null &&
     withFees.length === 0 &&
-    !hasWrapped &&
-    holdings.length === 0
+    !hasWrapped
   )
     return null;
 
@@ -499,47 +393,6 @@ export function FeesPanel({
             </a>
           )}
         </p>
-      )}
-
-      {holdings.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium">Fee tokens held</p>
-          {holdings.map((holding) => {
-            const locked = holding.balance - holding.releasable;
-            return (
-              <div
-                key={holding.address}
-                className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
-              >
-                <div className="min-w-0 space-y-0.5">
-                  <p className="truncate text-sm font-medium">
-                    {formatTokens(Number(holding.balance) / 1e18)}{" "}
-                    <span className="text-muted-foreground">
-                      {holding.symbol}
-                    </span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {locked > 0n
-                      ? `${formatTokens(Number(holding.releasable) / 1e18)} sellable now — the rest opens within fifteen minutes of the collection.`
-                      : "Fully unlocked."}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="card"
-                  disabled={busy !== null || holding.releasable === 0n}
-                  onClick={() => sellToEth(holding)}
-                >
-                  {busy === `sell:${holding.address}` ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    "Sell to ETH"
-                  )}
-                </Button>
-              </div>
-            );
-          })}
-        </div>
       )}
 
       {wrapped && wrapped.balance > 0n && (

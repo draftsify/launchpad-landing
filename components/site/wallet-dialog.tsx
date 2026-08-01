@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FeesPanel } from "@/components/site/treasury-fees";
+import { WalletHoldings } from "@/components/site/wallet-holdings";
 import { LOGO_RATIOS } from "@/lib/logo-ratios";
 import { useWallet, shortenAddress } from "@/components/site/wallet-provider";
 import { cn } from "@/lib/utils";
@@ -92,9 +93,10 @@ export function WalletDialog({ children }: { children: React.ReactNode }) {
               </span>
             </div>
 
-            {/* Ce qui revient à cette adresse, sous l'adresse elle-même. Le
-                panneau ne rend rien si rien n'est dû, donc la modale reste
-                celle qu'elle était pour la plupart des gens. */}
+            {/* Ce que cette adresse détient, puis ce qui lui est dû. Les deux
+                panneaux ne rendent rien quand il n'y a rien, donc la modale
+                reste celle qu'elle était pour la plupart des gens. */}
+            <WalletHoldings />
             <FeesPanel />
 
             <Button

@@ -3,7 +3,7 @@ import { formatEther } from "viem";
 import { LAUNCHER_ADDRESS, isDeployed, publicClient } from "@/lib/chain";
 import { isHidden } from "@/lib/hidden";
 import { launcherAbi, lockerAbi, tokenAbi } from "@/lib/launcher";
-import { parseMetadata, type TokenMetadata } from "@/lib/metadata";
+import { imageSrc, parseMetadata, type TokenMetadata } from "@/lib/metadata";
 import type { Rules } from "@/lib/presets";
 import { erc20Abi, poolAbi, priceFromSqrt } from "@/lib/uniswap";
 
@@ -366,6 +366,8 @@ export type Holding = {
   balance: bigint;
   /** Ce qui peut sortir maintenant. Le reste attend `unlockSeconds`. */
   releasable: bigint;
+  /** Déjà prête pour une balise `img`, ou absente. */
+  image: string | undefined;
 };
 
 /**
@@ -403,6 +405,7 @@ export async function readHoldings(owner: `0x${string}`): Promise<Holding[]> {
           symbol: launch.symbol,
           balance,
           releasable,
+          image: imageSrc(launch.meta),
         };
       } catch {
         return null;
